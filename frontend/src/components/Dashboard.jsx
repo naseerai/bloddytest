@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import Sidebar from './pages/Sidebar';
 import UserManagement from './pages/UserManagement';
 import '../components/styles/Dashboard.css';
+import Devices from './pages/Devices';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -45,11 +46,13 @@ const Dashboard = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'users':
-        return <UserManagement currentUser={currentUser} userType="user" />;
-      case 'admins':
-        return <UserManagement currentUser={currentUser} userType="admin" />;
-      case 'dashboard':
+    case 'users':
+      return <UserManagement currentUser={currentUser} userType="user" />;
+    case 'admins':
+      return <UserManagement currentUser={currentUser} userType="admin" />;
+    case 'devices':
+      return <Devices currentUser={currentUser} />;
+    case 'dashboard':
       default:
         switch (currentUser.role) {
           case 'superadmin':
@@ -142,8 +145,9 @@ const Dashboard = () => {
         <div className="header">
           <div className="header-title">
             <h1>{activeTab === 'dashboard' ? 'Dashboard' : 
-                 activeTab === 'users' ? 'User Management' : 
-                 activeTab === 'admins' ? 'Admin Management' : 'Dashboard'}</h1>
+     activeTab === 'users' ? 'User Management' : 
+     activeTab === 'admins' ? 'Admin Management' : 
+     activeTab === 'devices' ? 'IoT Devices' : 'Dashboard'}</h1>
           </div>
           <div className="user-info">
             <div className="user-details">

@@ -1,4 +1,5 @@
-import { db } from '../firebase';
+//service/authService
+import { db } from '../firebase'; // Keep using db (Firestore) for users
 import { collection, query, where, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 
 export const authenticateUser = async (email, password) => {

@@ -4,19 +4,20 @@ import '../styles/Sidebar.css';
 const Sidebar = ({ currentUser, sidebarCollapsed, setSidebarCollapsed, activeTab, setActiveTab, onLogout }) => {
   const getMenuItems = () => {
     const items = [
-      { key: 'dashboard', label: 'Dashboard', icon: '📊' }
-    ];
+    { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { key: 'devices', label: 'Devices', icon: '📱' } // Add this line for all roles
+  ];
 
-    if (['superadmin', 'admin'].includes(currentUser.role)) {
-      items.push({ key: 'users', label: 'Users', icon: '👥' });
-    }
+  if (['superadmin', 'admin'].includes(currentUser.role)) {
+    items.push({ key: 'users', label: 'Users', icon: '👥' });
+  }
 
-    if (currentUser.role === 'superadmin') {
-      items.push({ key: 'admins', label: 'Admins', icon: '⚙️' });
-    }
+  if (currentUser.role === 'superadmin') {
+    items.push({ key: 'admins', label: 'Admins', icon: '⚙️' });
+  }
 
-    return items;
-  };
+  return items;
+};
 
   return (
     <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
