@@ -25,7 +25,7 @@ const Login = () => {
       localStorage.setItem('currentUser', JSON.stringify(user));
       
       // Redirect to dashboard based on role
-      navigate('/dashboard');
+      navigate('/dashboard?tab=dashboard');
       
       message.success(`Welcome back, ${user.role}!`);
     } catch (error) {
