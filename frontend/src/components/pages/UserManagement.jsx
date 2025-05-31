@@ -15,17 +15,24 @@ import {
   Spin,
   Row,
   Col,
-  Drawer
+  Drawer,
+  Upload,
+  Avatar
 } from 'antd';
 import { 
   PlusOutlined, 
   EditOutlined, 
   DeleteOutlined, 
   UserOutlined,
-  SettingOutlined
+  SettingOutlined,
+  UploadOutlined,
+  ReloadOutlined,
+  PhoneOutlined,
+  MailOutlined
 } from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import emailjs from '@emailjs/browser';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -38,6 +45,19 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
   const [editingUser, setEditingUser] = useState(null);
   const [form] = Form.useForm();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+
+  // EmailJS configuration - Replace with your actual values
+  const EMAIL_SERVICE_ID = 'service_yzg8o0c';
+  const EMAIL_TEMPLATE_ID = 'template_dhmdo1g';
+  const EMAIL_PUBLIC_KEY = 'jW2qEXXMeqrR_0nB7';
+
+  // Initialize EmailJS
+  useEffect(() => {
+    emailjs.init(EMAIL_PUBLIC_KEY);
+  }, []);
 
   // Handle window resize for responsive behavior
   useEffect(() => {
@@ -48,6 +68,123 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Generate random password
+  const generateRandomPassword = () => {
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    for (let i = 0; i < 12; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    return password;
+  };
+
+  // Send email with credentials
+  const sendCredentialsEmail = async (userEmail, userName, password, userRole) => {
+    setEmailSending(true);
+    try {
+      const templateParams = {
+        to_email: userEmail,
+        to_name: userName,
+        user_email: userEmail,
+        user_password: password,
+        user_role: userRole,
+        from_name: currentUser.name || 'Admin'
+      };
+
+      await emailjs.send(
+        EMAIL_SERVICE_ID,
+        EMAIL_TEMPLATE_ID,
+        templateParams
+      );
+
+      message.success('Login credentials sent to user via email');
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      message.error('Failed to send email with credentials');
+      
+      // Show credentials in modal as fallback
+      Modal.info({
+        title: 'Email Failed - Please Share Manually',
+        content: (
+          <div>
+            <p>Login credentials for {userEmail}:</p>
+            <div style={{ 
+              background: '#f5f5f5', 
+              padding: '8px 12px', 
+              borderRadius: '4px', 
+              fontFamily: 'monospace',
+              fontSize: '14px',
+              margin: '8px 0'
+            }}>
+              <strong>Email:</strong> {userEmail}<br/>
+              <strong>Password:</strong> {password}
+            </div>
+            <p style={{ fontSize: '12px', color: '#666' }}>
+              Please share these credentials with the user manually.
+            </p>
+          </div>
+        ),
+      });
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  // Upload image to Cloudinary
+  const uploadToCloudinary = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'unsigned_preset'); // Replace with your Cloudinary upload preset
+    formData.append('cloud_name', 'dlycx8dw3'); // Replace with your Cloudinary cloud name
+
+    try {
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/dlycx8dw3/image/upload`, // Replace with your cloud name
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error('Error uploading to Cloudinary:', error);
+      throw error;
+    }
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (info) => {
+    if (info.file.status === 'uploading') {
+      setUploadLoading(true);
+      return;
+    }
+
+    if (info.file.status === 'done' || info.file.originFileObj) {
+      try {
+        setUploadLoading(true);
+        const imageUrl = await uploadToCloudinary(info.file.originFileObj || info.file);
+        form.setFieldsValue({ photo: imageUrl });
+        message.success('Photo uploaded successfully!');
+      } catch (error) {
+        message.error('Failed to upload photo');
+      } finally {
+        setUploadLoading(false);
+      }
+    }
+  };
+
+  // Custom upload function
+  const customUpload = ({ file, onSuccess, onError }) => {
+    uploadToCloudinary(file)
+      .then((url) => {
+        onSuccess(url);
+      })
+      .catch((error) => {
+        onError(error);
+      });
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -83,17 +220,32 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
   const handleSubmit = async (values) => {
     try {
       const usersRef = collection(db, 'users');
+      
+      // Clean the values object to remove undefined fields
+      const cleanedValues = Object.entries(values).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
+
+      // Generate password for new users only
+      const password = editingUser ? 
+        (cleanedValues.password || editingUser.password) : 
+        generateRandomPassword();
+
       const userData = {
-        ...values,
-        role: userType === 'admin' ? 'admin' : values.role,
+        ...cleanedValues,
+        role: userType === 'admin' ? 'admin' : cleanedValues.role,
         createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
-        isGuest: false
+        isGuest: false,
+        password: password
       };
 
       if (editingUser) {
         const userRef = doc(db, 'users', editingUser.id);
-        // Don't update password if it's empty during edit
-        if (!values.password) {
+        // Remove password from update if it wasn't changed
+        if (!cleanedValues.password) {
           delete userData.password;
         }
         await updateDoc(userRef, userData);
@@ -101,6 +253,14 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
       } else {
         await addDoc(usersRef, userData);
         message.success(`${userType === 'admin' ? 'Admin' : 'User'} added successfully`);
+        
+        // Send email with credentials for new users
+        await sendCredentialsEmail(
+          cleanedValues.email,
+          cleanedValues.name,
+          password,
+          userData.role
+        );
       }
 
       fetchUsers();
@@ -114,9 +274,11 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
   const handleEdit = (user) => {
     setEditingUser(user);
     form.setFieldsValue({
-      email: user.email,
-      role: user.role,
-      password: '' // Don't pre-fill password
+      name: user.name || '',
+      email: user.email || '',
+      phoneNumber: user.phoneNumber || '',
+      photo: user.photo || '',
+      role: user.role || 'user'
     });
     
     if (isMobile) {
@@ -142,6 +304,7 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     setIsModalVisible(false);
     setIsDrawerVisible(false);
     setEditingUser(null);
+    setGeneratedPassword('');
     form.resetFields();
   };
 
@@ -157,6 +320,13 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     } else {
       setIsModalVisible(true);
     }
+  };
+
+  const handleGenerateNewPassword = () => {
+    const newPassword = generateRandomPassword();
+    setGeneratedPassword(newPassword);
+    form.setFieldsValue({ password: newPassword });
+    message.success('New password generated!');
   };
 
   const canManage = () => {
@@ -181,15 +351,58 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
 
   const columns = [
     {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
+      title: 'User',
+      dataIndex: 'name',
+      key: 'name',
       ellipsis: true,
-      width: isMobile ? 200 : 300,
-      render: (email) => (
+      width: isMobile ? 150 : 200,
+      render: (name, record) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <UserOutlined style={{ color: '#1890ff' }} />
-          <span style={{ fontSize: isMobile ? '12px' : '14px' }}>{email}</span>
+          <Avatar 
+            size={isMobile ? 32 : 40}
+            src={record.photo}
+            icon={<UserOutlined />}
+            style={{ 
+              backgroundColor: record.photo ? 'transparent' : '#1890ff',
+              flexShrink: 0
+            }}
+          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ 
+              fontSize: isMobile ? '12px' : '14px',
+              fontWeight: 500,
+              color: '#262626',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {name || 'N/A'}
+            </div>
+            <div style={{ 
+              fontSize: isMobile ? '10px' : '12px',
+              color: '#8c8c8c',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {record.email}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Contact',
+      dataIndex: 'phoneNumber',
+      key: 'phoneNumber',
+      width: isMobile ? 120 : 150,
+      responsive: ['sm', 'md', 'lg', 'xl'],
+      render: (phoneNumber) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <PhoneOutlined style={{ color: '#52c41a', fontSize: '12px' }} />
+          <span style={{ fontSize: isMobile ? '11px' : '13px' }}>
+            {phoneNumber || 'N/A'}
+          </span>
         </div>
       ),
     },
@@ -274,6 +487,17 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
   const formItems = (
     <>
       <Form.Item
+        name="name"
+        label="Full Name"
+        rules={[
+          { required: true, message: 'Please input full name!' },
+          { min: 2, message: 'Name must be at least 2 characters!' }
+        ]}
+      >
+        <Input prefix={<UserOutlined />} placeholder="Enter full name" />
+      </Form.Item>
+
+      <Form.Item
         name="email"
         label="Email"
         rules={[
@@ -281,26 +505,75 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
           { type: 'email', message: 'Please enter a valid email!' }
         ]}
       >
-        <Input prefix={<UserOutlined />} placeholder="Enter email address" />
+        <Input prefix={<MailOutlined />} placeholder="Enter email address" />
       </Form.Item>
 
       <Form.Item
-        name="password"
-        label="Password"
+        name="phoneNumber"
+        label="Phone Number"
         rules={[
-          { 
-            required: !editingUser, 
-            message: 'Please input password!' 
-          },
-          { 
-            min: 6, 
-            message: 'Password must be at least 6 characters!' 
-          }
+          { required: true, message: 'Please input phone number!' },
+          { pattern: /^[\+]?[1-9][\d]{0,15}$/, message: 'Please enter a valid phone number!' }
         ]}
       >
-        <Input.Password 
-          placeholder={editingUser ? "Leave blank to keep current password" : "Enter password"}
-        />
+        <Input prefix={<PhoneOutlined />} placeholder="Enter phone number" />
+      </Form.Item>
+
+      <Form.Item
+        name="photo"
+        label="Profile Photo"
+      >
+        <div>
+          <Upload
+            name="photo"
+            listType="picture-card"
+            className="avatar-uploader"
+            showUploadList={false}
+            customRequest={customUpload}
+            beforeUpload={(file) => {
+              const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp';
+              if (!isJpgOrPng) {
+                message.error('You can only upload JPG/PNG/WEBP files!');
+                return false;
+              }
+              const isLt2M = file.size / 1024 / 1024 < 2;
+              if (!isLt2M) {
+                message.error('Image must be smaller than 2MB!');
+                return false;
+              }
+              return true;
+            }}
+            onChange={handleImageUpload}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px' }}>
+              {uploadLoading ? (
+                <Spin />
+              ) : form.getFieldValue('photo') ? (
+                <img 
+                  src={form.getFieldValue('photo')} 
+                  alt="avatar" 
+                  style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }} 
+                />
+              ) : (
+                <div>
+                  <PlusOutlined style={{ fontSize: '16px', marginBottom: '8px' }} />
+                  <div style={{ marginTop: 8, fontSize: '12px' }}>Upload Photo</div>
+                </div>
+              )}
+            </div>
+          </Upload>
+          {form.getFieldValue('photo') && (
+            <div style={{ marginTop: '8px', textAlign: 'center' }}>
+              <Button 
+                size="small" 
+                type="link" 
+                onClick={() => form.setFieldsValue({ photo: '' })}
+              >
+                Remove Photo
+              </Button>
+            </div>
+          )}
+        </div>
       </Form.Item>
 
       <Form.Item
@@ -365,6 +638,7 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
               icon={<PlusOutlined />}
               onClick={handleAdd}
               size={isMobile ? 'middle' : 'large'}
+              loading={emailSending}
               style={{
                 borderRadius: 6,
                 fontWeight: 500,
@@ -420,7 +694,7 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
           open={isModalVisible}
           onCancel={handleCancel}
           footer={null}
-          width={isMobile ? '90%' : 500}
+          width={isMobile ? '90%' : 600}
           centered
         >
           <Form
@@ -432,10 +706,14 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
             {formItems}
             <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
               <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <Button onClick={handleCancel}>
+                <Button onClick={handleCancel} disabled={emailSending}>
                   Cancel
                 </Button>
-                <Button type="primary" htmlType="submit">
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  loading={emailSending}
+                >
                   {editingUser ? 'Update' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}
                 </Button>
               </Space>
@@ -449,20 +727,25 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
           placement="bottom"
           onClose={handleCancel}
           open={isDrawerVisible}
-          height="80%"
+          height="90%"
         >
           <Form
             form={form}
             layout="vertical"
             onFinish={handleSubmit}
+            style={{ paddingBottom: 24 }}
           >
             {formItems}
             <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
               <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <Button onClick={handleCancel}>
+                <Button onClick={handleCancel} disabled={emailSending}>
                   Cancel
                 </Button>
-                <Button type="primary" htmlType="submit">
+                <Button 
+                  type="primary" 
+                  htmlType="submit"
+                  loading={emailSending}
+                >
                   {editingUser ? 'Update' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}
                 </Button>
               </Space>
@@ -480,6 +763,15 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
         
         .responsive-table .ant-table-tbody > tr:hover > td {
           background-color: #f5f5f5;
+        }
+        
+        .avatar-uploader .ant-upload {
+          border: 1px dashed #d9d9d9;
+          border-radius: 6px;
+        }
+        
+        .avatar-uploader .ant-upload:hover {
+          border-color: #1890ff;
         }
         
         @media (max-width: 768px) {
