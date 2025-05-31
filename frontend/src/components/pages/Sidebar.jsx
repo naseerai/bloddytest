@@ -1,51 +1,65 @@
 import React from 'react';
 import '../styles/Sidebar.css';
+import { IoLogOutOutline } from "react-icons/io5";
+import { AiOutlineDashboard } from "react-icons/ai";
+import { MdOutlineDevices } from "react-icons/md";
+import { FaCrown } from "react-icons/fa6";
+import { HiUsers } from "react-icons/hi";
+import { IoLogoElectron } from "react-icons/io5";
+import { GoSidebarCollapse,GoSidebarExpand } from "react-icons/go";
 
 const Sidebar = ({ currentUser, sidebarCollapsed, setSidebarCollapsed, activeTab, setActiveTab, onLogout }) => {
   const getMenuItems = () => {
     const items = [
-    { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { key: 'devices', label: 'Devices', icon: '📱' } // Add this line for all roles
-  ];
+      { key: 'dashboard', label: 'Dashboard', icon: <AiOutlineDashboard className="menu-icon" /> },
+      { key: 'devices', label: 'Devices', icon: <MdOutlineDevices className="menu-icon" /> }
+    ];
 
-  if (['superadmin', 'admin'].includes(currentUser.role)) {
-    items.push({ key: 'users', label: 'Users', icon: '👥' });
-  }
+    if (['superadmin', 'admin'].includes(currentUser.role)) {
+      items.push({ key: 'users', label: 'Users', icon: <HiUsers className="menu-icon" /> });
+    }
 
-  if (currentUser.role === 'superadmin') {
-    items.push({ key: 'admins', label: 'Admins', icon: '⚙️' });
-  }
+    if (currentUser.role === 'superadmin') {
+      items.push({ key: 'admins', label: 'Admins', icon: <FaCrown className="menu-icon" /> });
+    }
 
-  return items;
-};
+    return items;
+  };
 
   return (
     <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-      <div className="logo">Logo</div>
+      <div className="logo">
+        <IoLogoElectron className="logo-icon" />
+        {!sidebarCollapsed && <span className="logo-text">Logo</span>}
+      </div>
+      
       <button 
         className="collapse-btn"
         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
-        {sidebarCollapsed ? '>' : '<'}
+        {sidebarCollapsed ? '<' : '>'}
       </button>
-      
+
       <ul className="menu">
         {getMenuItems().map(item => (
           <li 
-            key={item.key} 
+            key={item.key}
             className={`menu-item ${activeTab === item.key ? 'active' : ''}`}
             onClick={() => setActiveTab(item.key)}
           >
-            <span className="menu-icon">{item.icon}</span>
+            {item.icon}
             {!sidebarCollapsed && <span className="menu-label">{item.label}</span>}
           </li>
         ))}
-        
-        <li className="menu-item logout-item" onClick={onLogout}>
-          <span className="menu-icon">🚪</span>
-          {!sidebarCollapsed && <span className="menu-label">Logout</span>}
-        </li>
       </ul>
+
+      <div 
+        className="menu-item logout-item"
+        onClick={onLogout}
+      >
+        <IoLogOutOutline className="menu-icon" />
+        {!sidebarCollapsed && <span className="menu-label">Logout</span>}
+      </div>
     </div>
   );
 };
