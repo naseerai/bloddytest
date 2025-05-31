@@ -1,18 +1,53 @@
 import React, { useState, useEffect } from 'react';
+import { 
+  Table, 
+  Button, 
+  Modal, 
+  Form, 
+  Input, 
+  Select, 
+  Tag, 
+  Space, 
+  Popconfirm, 
+  Card,
+  Typography,
+  message,
+  Spin,
+  Row,
+  Col,
+  Drawer
+} from 'antd';
+import { 
+  PlusOutlined, 
+  EditOutlined, 
+  DeleteOutlined, 
+  UserOutlined,
+  SettingOutlined
+} from '@ant-design/icons';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import '../styles/UserManagement.css';
+
+const { Title } = Typography;
+const { Option } = Select;
 
 const UserManagement = ({ currentUser, userType = 'user' }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    role: userType === 'admin' ? 'admin' : 'user'
-  });
-  const [editingUserId, setEditingUserId] = useState(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [form] = Form.useForm();
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Handle window resize for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -21,22 +56,21 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
       const usersRef = collection(db, 'users');
       
       if (userType === 'admin') {
-        // Show only admin users
         q = query(usersRef, where('role', '==', 'admin'));
       } else {
-        // Show only regular users
         q = query(usersRef, where('role', '==', 'user'));
       }
       
       const querySnapshot = await getDocs(q);
       const usersData = querySnapshot.docs.map(doc => ({
+        key: doc.id,
         id: doc.id,
         ...doc.data()
       }));
       setUsers(usersData);
     } catch (error) {
       console.error('Error fetching users:', error);
-      alert('Failed to fetch users');
+      message.error('Failed to fetch users');
     } finally {
       setLoading(false);
     }
@@ -46,70 +80,83 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     fetchUsers();
   }, [userType]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (values) => {
     try {
       const usersRef = collection(db, 'users');
       const userData = {
-        ...formData,
-        createdAt: new Date().toISOString(),
+        ...values,
+        role: userType === 'admin' ? 'admin' : values.role,
+        createdAt: editingUser ? editingUser.createdAt : new Date().toISOString(),
         isGuest: false
       };
 
-      if (editingUserId) {
-        const userRef = doc(db, 'users', editingUserId);
+      if (editingUser) {
+        const userRef = doc(db, 'users', editingUser.id);
+        // Don't update password if it's empty during edit
+        if (!values.password) {
+          delete userData.password;
+        }
         await updateDoc(userRef, userData);
-        alert(`${userType === 'admin' ? 'Admin' : 'User'} updated successfully`);
+        message.success(`${userType === 'admin' ? 'Admin' : 'User'} updated successfully`);
       } else {
         await addDoc(usersRef, userData);
-        alert(`${userType === 'admin' ? 'Admin' : 'User'} added successfully`);
+        message.success(`${userType === 'admin' ? 'Admin' : 'User'} added successfully`);
       }
 
       fetchUsers();
-      resetForm();
-      setShowAddModal(false);
+      handleCancel();
     } catch (error) {
       console.error('Error saving user:', error);
-      alert(`Failed to save ${userType === 'admin' ? 'admin' : 'user'}`);
+      message.error(`Failed to save ${userType === 'admin' ? 'admin' : 'user'}`);
     }
   };
 
   const handleEdit = (user) => {
-    setFormData({
+    setEditingUser(user);
+    form.setFieldsValue({
       email: user.email,
-      password: '',
-      role: user.role
+      role: user.role,
+      password: '' // Don't pre-fill password
     });
-    setEditingUserId(user.id);
-    setShowAddModal(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm(`Are you sure you want to delete this ${userType === 'admin' ? 'admin' : 'user'}?`)) {
-      try {
-        const userRef = doc(db, 'users', id);
-        await deleteDoc(userRef);
-        alert(`${userType === 'admin' ? 'Admin' : 'User'} deleted successfully`);
-        fetchUsers();
-      } catch (error) {
-        console.error('Error deleting user:', error);
-        alert(`Failed to delete ${userType === 'admin' ? 'admin' : 'user'}`);
-      }
+    
+    if (isMobile) {
+      setIsDrawerVisible(true);
+    } else {
+      setIsModalVisible(true);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      email: '',
-      password: '',
+  const handleDelete = async (id) => {
+    try {
+      const userRef = doc(db, 'users', id);
+      await deleteDoc(userRef);
+      message.success(`${userType === 'admin' ? 'Admin' : 'User'} deleted successfully`);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      message.error(`Failed to delete ${userType === 'admin' ? 'admin' : 'user'}`);
+    }
+  };
+
+  const handleCancel = () => {
+    setIsModalVisible(false);
+    setIsDrawerVisible(false);
+    setEditingUser(null);
+    form.resetFields();
+  };
+
+  const handleAdd = () => {
+    setEditingUser(null);
+    form.resetFields();
+    form.setFieldsValue({
       role: userType === 'admin' ? 'admin' : 'user'
     });
-    setEditingUserId(null);
+    
+    if (isMobile) {
+      setIsDrawerVisible(true);
+    } else {
+      setIsModalVisible(true);
+    }
   };
 
   const canManage = () => {
@@ -119,160 +166,333 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     return ['superadmin', 'admin'].includes(currentUser.role);
   };
 
-  return (
-    <div className="user-management-container">
-      <div className="user-management-header">
-        <h2>{userType === 'admin' ? 'Admin Management' : 'User Management'}</h2>
-        {canManage() && (
-          <button 
-            className="add-user-btn"
-            onClick={() => {
-              resetForm();
-              setShowAddModal(true);
-            }}
+  const getRoleColor = (role) => {
+    switch (role) {
+      case 'superadmin':
+        return 'green';
+      case 'admin':
+        return 'orange';
+      case 'user':
+        return 'blue';
+      default:
+        return 'default';
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      ellipsis: true,
+      width: isMobile ? 200 : 300,
+      render: (email) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <UserOutlined style={{ color: '#1890ff' }} />
+          <span style={{ fontSize: isMobile ? '12px' : '14px' }}>{email}</span>
+        </div>
+      ),
+    },
+    {
+      title: 'Role',
+      dataIndex: 'role',
+      key: 'role',
+      width: isMobile ? 80 : 120,
+      responsive: ['sm', 'md', 'lg', 'xl'],
+      render: (role) => (
+        <Tag 
+          color={getRoleColor(role)} 
+          style={{ 
+            textTransform: 'uppercase',
+            fontSize: isMobile ? '10px' : '12px',
+            padding: isMobile ? '2px 6px' : '4px 8px'
+          }}
+        >
+          {role}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: isMobile ? 100 : 140,
+      responsive: ['md', 'lg', 'xl'],
+      render: (createdAt) => (
+        <span style={{ fontSize: isMobile ? '11px' : '13px' }}>
+          {createdAt ? new Date(createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: '2-digit'
+          }) : 'N/A'}
+        </span>
+      ),
+    },
+  ];
+
+  if (canManage()) {
+    columns.push({
+      title: 'Actions',
+      key: 'actions',
+      width: isMobile ? 120 : 160,
+      fixed: isMobile ? 'right' : false,
+      render: (_, record) => (
+        <Space size="small" wrap>
+          <Button
+            type="primary"
+            ghost
+            size={isMobile ? 'small' : 'middle'}
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+            style={{ fontSize: isMobile ? '11px' : '13px' }}
           >
-            + Add {userType === 'admin' ? 'Admin' : 'User'}
-          </button>
-        )}
-      </div>
+            {!isMobile && 'Edit'}
+          </Button>
+          <Popconfirm
+            title={`Delete ${userType === 'admin' ? 'admin' : 'user'}?`}
+            description={`Are you sure you want to delete this ${userType === 'admin' ? 'admin' : 'user'}?`}
+            onConfirm={() => handleDelete(record.id)}
+            okText="Yes"
+            cancelText="No"
+            placement={isMobile ? 'topRight' : 'top'}
+          >
+            <Button
+              type="primary"
+              danger
+              size={isMobile ? 'small' : 'middle'}
+              icon={<DeleteOutlined />}
+              style={{ fontSize: isMobile ? '11px' : '13px' }}
+            >
+              {!isMobile && 'Delete'}
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    });
+  }
 
-      {loading ? (
-        <div className="loading">Loading...</div>
-      ) : (
-        <div className="user-table-container">
-          <table className="user-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Created At</th>
-                {canManage() && <th>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr key={user.id}>
-                  <td>{user.email}</td>
-                  <td>
-                    <span className={`role-badge ${user.role}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td>{new Date(user.createdAt).toLocaleDateString()}</td>
-                  {canManage() && (
-                    <td>
-                      <div className="action-buttons">
-                        <button 
-                          className="edit-btn"
-                          onClick={() => handleEdit(user)}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className="delete-btn"
-                          onClick={() => handleDelete(user.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={canManage() ? 4 : 3} className="no-data">
-                    No {userType === 'admin' ? 'admins' : 'users'} found
-                  </td>
-                </tr>
+  const formItems = (
+    <>
+      <Form.Item
+        name="email"
+        label="Email"
+        rules={[
+          { required: true, message: 'Please input email!' },
+          { type: 'email', message: 'Please enter a valid email!' }
+        ]}
+      >
+        <Input prefix={<UserOutlined />} placeholder="Enter email address" />
+      </Form.Item>
+
+      <Form.Item
+        name="password"
+        label="Password"
+        rules={[
+          { 
+            required: !editingUser, 
+            message: 'Please input password!' 
+          },
+          { 
+            min: 6, 
+            message: 'Password must be at least 6 characters!' 
+          }
+        ]}
+      >
+        <Input.Password 
+          placeholder={editingUser ? "Leave blank to keep current password" : "Enter password"}
+        />
+      </Form.Item>
+
+      <Form.Item
+        name="role"
+        label="Role"
+        rules={[{ required: true, message: 'Please select role!' }]}
+      >
+        <Select 
+          placeholder="Select role"
+          disabled={userType === 'admin'}
+        >
+          {userType === 'admin' ? (
+            <Option value="admin">Admin</Option>
+          ) : (
+            <>
+              <Option value="user">User</Option>
+              {currentUser.role === 'superadmin' && (
+                <Option value="admin">Admin</Option>
               )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </>
+          )}
+        </Select>
+      </Form.Item>
+    </>
+  );
 
-      {/* Add/Edit Modal */}
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>{editingUserId ? 'Edit' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}</h3>
-              <button 
-                className="close-btn"
-                onClick={() => {
-                  setShowAddModal(false);
-                  resetForm();
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="user-form">
-              <div className="form-group">
-                <label>Email:</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Password:</label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  required={!editingUserId}
-                  placeholder={editingUserId ? "Leave blank to keep current password" : ""}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Role:</label>
-                <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleInputChange}
-                  required
-                  disabled={userType === 'admin'} // Fixed role for admin section
-                >
-                  {userType === 'admin' ? (
-                    <option value="admin">Admin</option>
-                  ) : (
-                    <>
-                      <option value="user">User</option>
-                      {currentUser.role === 'superadmin' && (
-                        <option value="admin">Admin</option>
-                      )}
-                    </>
-                  )}
-                </select>
-              </div>
-              
-              <div className="form-actions">
-                <button type="submit" className="submit-btn">
-                  {editingUserId ? 'Update' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}
-                </button>
-                <button 
-                  type="button" 
-                  className="cancel-btn"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+  return (
+    <div style={{ padding: isMobile ? 12 : 24 }}>
+      <Card 
+        style={{ 
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}
+      >
+        {/* Header Section with proper alignment */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: 24,
+          flexWrap: 'wrap',
+          gap: 16
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {userType === 'admin' ? <SettingOutlined style={{ fontSize: '20px', color: '#1890ff' }} /> : <UserOutlined style={{ fontSize: '20px', color: '#1890ff' }} />}
+            <Title 
+              level={isMobile ? 3 : 2} 
+              style={{ 
+                margin: 0,
+                fontSize: isMobile ? '18px' : '24px',
+                fontWeight: 600,
+                color: '#262626'
+              }}
+            >
+              {userType === 'admin' ? 'Admin Management' : 'User Management'}
+            </Title>
           </div>
+          
+          {canManage() && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+              size={isMobile ? 'middle' : 'large'}
+              style={{
+                borderRadius: 6,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              Add {userType === 'admin' ? 'Admin' : 'User'}
+            </Button>
+          )}
         </div>
-      )}
+
+        {/* Table Section with proper alignment */}
+        <div style={{ 
+          width: '100%',
+          overflow: 'hidden'
+        }}>
+          <Table
+            columns={columns}
+            dataSource={users}
+            loading={loading}
+            pagination={{
+              showSizeChanger: !isMobile,
+              showQuickJumper: !isMobile,
+              showTotal: (total, range) =>
+                `${range[0]}-${range[1]} of ${total} ${
+                  userType === 'admin' ? 'admins' : 'users'
+                }`,
+              responsive: true,
+              size: isMobile ? 'small' : 'default',
+              pageSize: isMobile ? 5 : 10,
+              showLessItems: isMobile,
+            }}
+            scroll={{ 
+              x: isMobile ? 400 : 800,
+              y: isMobile ? 400 : undefined
+            }}
+            size={isMobile ? 'small' : 'middle'}
+            locale={{
+              emptyText: `No ${userType === 'admin' ? 'admins' : 'users'} found`
+            }}
+            style={{
+              background: '#fff',
+            }}
+            className="responsive-table"
+          />
+        </div>
+
+        {/* Desktop Modal */}
+        <Modal
+          title={`${editingUser ? 'Edit' : 'Add'} ${userType === 'admin' ? 'Admin' : 'User'}`}
+          open={isModalVisible}
+          onCancel={handleCancel}
+          footer={null}
+          width={isMobile ? '90%' : 500}
+          centered
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleSubmit}
+            style={{ marginTop: 16 }}
+          >
+            {formItems}
+            <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+                <Button onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button type="primary" htmlType="submit">
+                  {editingUser ? 'Update' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Mobile Drawer */}
+        <Drawer
+          title={`${editingUser ? 'Edit' : 'Add'} ${userType === 'admin' ? 'Admin' : 'User'}`}
+          placement="bottom"
+          onClose={handleCancel}
+          open={isDrawerVisible}
+          height="80%"
+        >
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleSubmit}
+          >
+            {formItems}
+            <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+                <Button onClick={handleCancel}>
+                  Cancel
+                </Button>
+                <Button type="primary" htmlType="submit">
+                  {editingUser ? 'Update' : 'Add'} {userType === 'admin' ? 'Admin' : 'User'}
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Drawer>
+      </Card>
+
+      <style jsx>{`
+        .responsive-table .ant-table-thead > tr > th {
+          background-color: #fafafa;
+          font-weight: 600;
+          border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .responsive-table .ant-table-tbody > tr:hover > td {
+          background-color: #f5f5f5;
+        }
+        
+        @media (max-width: 768px) {
+          .responsive-table .ant-table-thead > tr > th {
+            padding: 8px 12px;
+            font-size: 12px;
+          }
+          
+          .responsive-table .ant-table-tbody > tr > td {
+            padding: 8px 12px;
+          }
+        }
+      `}</style>
     </div>
   );
 };
