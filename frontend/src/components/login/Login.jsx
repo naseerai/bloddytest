@@ -1,22 +1,43 @@
-import React from 'react';
-import { Form, Input, Button, Card, Typography } from 'antd';
+import React, { useState } from 'react';
+import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import '../styles/login.css';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import LoginImage from '../assets/Loginimage.jpg';
+import { authenticateUser } from '../services/authService';
 
 const { Title, Text } = Typography;
 
 const Login = () => {
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const onFinish = (values) => {
-    console.log('Login values:', values);
-    // Handle login logic here
+  const onFinish = async (values) => {
+    try {
+      setLoading(true);
+      const { email, password } = values;
+      
+      // Authenticate user
+      const user = await authenticateUser(email, password);
+      
+      // Store user data in localStorage or context
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      
+      // Redirect to dashboard based on role
+      navigate('/dashboard');
+      
+      message.success(`Welcome back, ${user.role}!`);
+    } catch (error) {
+      message.error(error.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onFinishFailed = (errorInfo) => {
     console.log('Failed:', errorInfo);
+    message.error('Please fill all required fields correctly.');
   };
 
   return (
@@ -91,6 +112,7 @@ const Login = () => {
                   htmlType="submit"
                   size="large"
                   className="login-button"
+                  loading={loading}
                   block
                 >
                   Sign In

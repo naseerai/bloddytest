@@ -1,30 +1,59 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography } from 'antd';
+import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import '../styles/login.css';
-import GLI from '../assets/GuestLoginImage.jpg'; // Assuming you have a guest login image
+import GLI from '../assets/GuestLoginImage.jpg';
+import { guestLogin } from '../services/authService';
 
 const { Title, Text } = Typography;
 
 const GuestLogin = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const onFinish = async (values) => {
-    console.log('Guest Login values:', values);
-    setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      setLoading(true);
+      const { email } = values;
+      
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      const guestUser = await guestLogin(email);
+      
+      localStorage.setItem('currentUser', JSON.stringify({
+        id: guestUser.id,
+        email: guestUser.email,
+        role: guestUser.role,
+        isGuest: true
+      }));
+      
+      navigate('/dashboard');
+      
+      message.success(`Welcome${guestUser.createdAt === guestUser.lastLogin ? '' : ' back'}, Guest!`);
+    } catch (error) {
+      if (error.message.includes('already registered')) {
+        message.error(error.message);
+        form.setFields([
+          {
+            name: 'email',
+            errors: [error.message],
+          },
+        ]);
+      } else {
+        message.error(error.message || 'Guest login failed. Please try again.');
+      }
+    } finally {
       setLoading(false);
-      // Handle guest login logic here
-      alert(`Welcome, ${values.guestName}!`);
-    }, 1000);
+    }
   };
 
   const onFinishFailed = (errorInfo) => {
     console.log('Failed:', errorInfo);
+    message.error('Please enter a valid email.');
   };
 
   return (
@@ -38,7 +67,7 @@ const GuestLogin = () => {
                 Guest Access
               </Title>
               <Text className="login-subtitle">
-                Enter your name to continue as guest
+                Enter your email to continue as guest
               </Text>
             </div>
 
@@ -52,25 +81,25 @@ const GuestLogin = () => {
               className="login-form"
             >
               <Form.Item
-                              label="Email"
-                              name="email"
-                              rules={[
-                                {
-                                  required: true,
-                                  message: 'Please input your email!',
-                                },
-                                {
-                                  type: 'email',
-                                  message: 'Please enter a valid email!',
-                                },
-                              ]}
-                            >
-                              <Input
-                                prefix={<UserOutlined />}
-                                placeholder="Enter your email"
-                                size="large"
-                              />
-                            </Form.Item>
+                label="Email"
+                name="email"
+                rules={[
+                  {
+                    required: true,
+                    message: 'Please input your email!',
+                  },
+                  {
+                    type: 'email',
+                    message: 'Please enter a valid email!',
+                  },
+                ]}
+              >
+                <Input
+                  prefix={<UserOutlined />}
+                  placeholder="Enter your email"
+                  size="large"
+                />
+              </Form.Item>
 
               <Form.Item>
                 <Button
@@ -97,10 +126,10 @@ const GuestLogin = () => {
           <div className="login-image-section">
             <div className="image-container">
               <img
-                              src={GLI}
-                              alt="Login illustration"
-                              className="login-image"
-                              />
+                src={GLI}
+                alt="Login illustration"
+                className="login-image"
+                />
               <div className="image-overlay">
                 <Title level={3} className="overlay-title">
                   Quick Access
