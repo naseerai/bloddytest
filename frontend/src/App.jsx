@@ -11,6 +11,11 @@ const ProtectedRoute = ({ children }) => {
   return currentUser ? children : <Navigate to="/" replace />;
 };
 
+// Component to redirect to dashboard with default tab
+const DashboardRedirect = () => {
+  return <Navigate to="/dashboard?tab=dashboard" replace />;
+};
+
 function App() {
   return (
     <Router>
@@ -22,6 +27,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+        {/* Redirect /dashboard without tab to /dashboard?tab=dashboard */}
+        <Route 
+          path="/dashboard-redirect" 
+          element={
+            <ProtectedRoute>
+              <DashboardRedirect />
             </ProtectedRoute>
           } 
         />
