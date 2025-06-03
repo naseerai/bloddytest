@@ -61,8 +61,8 @@ const Sidebar = ({ currentUser, sidebarCollapsed, setSidebarCollapsed, activeTab
         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
       >
         {sidebarCollapsed ? 
-          <GoSidebarExpand className="collapse-icon" /> : 
-          <GoSidebarCollapse className="collapse-icon" />
+          "<" : 
+          ">"
         }
       </button>
 
