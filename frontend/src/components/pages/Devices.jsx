@@ -89,6 +89,9 @@ const Devices = ({ currentUser }) => {
 useEffect(() => {
   if (!currentUser) return;
 
+  // Keep track of processed notifications to avoid duplicates
+  const processedNotifications = new Set();
+
   const notificationsQuery = query(
     collection(db, 'user_notifications'),
     where('targetUserId', '==', currentUser.id),
@@ -96,9 +99,17 @@ useEffect(() => {
   );
 
   const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-    snapshot.docChanges().forEach(change => {
+    snapshot.docChanges().forEach(async (change) => {
       if (change.type === 'added') {
         const notification = { id: change.doc.id, ...change.doc.data() };
+        
+        // Skip if we've already processed this notification
+        if (processedNotifications.has(notification.id)) {
+          return;
+        }
+        
+        // Mark as processed
+        processedNotifications.add(notification.id);
         
         if (notification.type === 'session_started') {
           // For guests, always auto-redirect
@@ -110,9 +121,16 @@ useEffect(() => {
               window.location.reload();
             }, 1000);
           }
+          
+          // Delete the notification after processing
+          try {
+            await deleteDoc(doc(db, 'user_notifications', notification.id));
+          } catch (error) {
+            console.error('Error deleting session_started notification:', error);
+          }
         }
         
-        // NEW: Handle session termination notifications
+        // Handle session termination notifications
         if (notification.type === 'session_terminated') {
           alert('Your session has been terminated by an administrator.');
           
@@ -123,6 +141,13 @@ useEffect(() => {
           
           if (countdownInterval.current) {
             clearInterval(countdownInterval.current);
+          }
+          
+          // Delete the notification to prevent re-triggering
+          try {
+            await deleteDoc(doc(db, 'user_notifications', notification.id));
+          } catch (error) {
+            console.error('Error deleting session_terminated notification:', error);
           }
           
           // Force redirect back to devices list
