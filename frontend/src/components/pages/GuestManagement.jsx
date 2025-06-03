@@ -1,4 +1,28 @@
 import React, { useState, useEffect } from 'react';
+import { 
+  Table, 
+  Button, 
+  Card, 
+  Tag, 
+  Space, 
+  Select, 
+  Typography, 
+  Spin, 
+  Empty, 
+  message,
+  Popconfirm,
+  Badge,
+  Row,
+  Col
+} from 'antd';
+import { 
+  DeleteOutlined, 
+  ArrowUpOutlined, 
+  CheckOutlined, 
+  CloseOutlined,
+  ClockCircleOutlined,
+  UserOutlined
+} from '@ant-design/icons';
 import { db } from '../firebase';
 import { 
   collection, 
@@ -12,6 +36,9 @@ import {
   serverTimestamp,
   addDoc
 } from 'firebase/firestore';
+
+const { Title, Text } = Typography;
+const { Option } = Select;
 
 // Active Guests Component
 export const ActiveGuests = ({ currentUser }) => {
@@ -54,8 +81,11 @@ export const ActiveGuests = ({ currentUser }) => {
         terminatedBy: currentUser.email,
         timestamp: serverTimestamp()
       });
+      
+      message.success('Session terminated successfully');
     } catch (error) {
       console.error('Error terminating session:', error);
+      message.error('Failed to terminate session');
     }
   };
 
@@ -66,64 +96,115 @@ export const ActiveGuests = ({ currentUser }) => {
     return `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, '0')}`;
   };
 
-  if (loading) return <div className="content-card">Loading active sessions...</div>;
+  const getRoleColor = (role) => {
+    const colors = {
+      'superadmin': 'red',
+      'admin': 'orange',
+      'user': 'blue',
+      'guest': 'green'
+    };
+    return colors[role] || 'default';
+  };
+
+  const columns = [
+    {
+      title: 'User',
+      dataIndex: 'userEmail',
+      key: 'userEmail',
+      render: (email) => (
+        <Space>
+          <UserOutlined />
+          <Text strong>{email}</Text>
+        </Space>
+      ),
+      responsive: ['md']
+    },
+    {
+      title: 'Project',
+      dataIndex: 'projectId',
+      key: 'projectId',
+      render: (projectId) => <Text code>{projectId}</Text>
+    },
+    {
+      title: 'Role',
+      dataIndex: 'userRole',
+      key: 'userRole',
+      render: (role) => (
+        <Tag color={getRoleColor(role)} style={{ textTransform: 'capitalize' }}>
+          {role}
+        </Tag>
+      )
+    },
+    {
+      title: 'Start Time',
+      dataIndex: 'startTime',
+      key: 'startTime',
+      render: (startTime) => startTime?.toLocaleString(),
+      responsive: ['lg']
+    },
+    {
+      title: 'Remaining',
+      key: 'remaining',
+      render: (_, session) => {
+        if (session.sessionType === 'guest') {
+          const remaining = getRemainingTime(session);
+          return remaining ? (
+            <Tag icon={<ClockCircleOutlined />} color={remaining === 'Expired' ? 'red' : 'blue'}>
+              {remaining}
+            </Tag>
+          ) : (
+            <Tag color="red">Expired</Tag>
+          );
+        }
+        return <Tag color="gold">Unlimited</Tag>;
+      }
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, session) => (
+        ['superadmin', 'admin'].includes(currentUser.role) && (
+          <Popconfirm
+            title="Are you sure you want to terminate this session?"
+            onConfirm={() => terminateSession(session.id)}
+            okText="Yes"
+            cancelText="No"
+          >
+            <Button 
+              type="primary" 
+              danger 
+              size="small"
+              icon={<DeleteOutlined />}
+            >
+              Terminate
+            </Button>
+          </Popconfirm>
+        )
+      ),
+      width: 120
+    }
+  ];
 
   return (
-    <div className="content-card">
-      <h2>Active Guest Sessions</h2>
-      
+    <Card title={<Title level={3}>Active Guest Sessions</Title>} loading={loading}>
       {activeSessions.length === 0 ? (
-        <p>No active sessions found.</p>
+        <Empty description="No active sessions found" />
       ) : (
-        <div className="sessions-table">
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Project</th>
-                <th>Role</th>
-                <th>Start Time</th>
-                <th>Remaining</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeSessions.map(session => (
-                <tr key={session.id}>
-                  <td>{session.userEmail}</td>
-                  <td>{session.projectId}</td>
-                  <td>
-                    <span className={`role-badge role-${session.userRole}`}>
-                      {session.userRole}
-                    </span>
-                  </td>
-                  <td>{session.startTime?.toLocaleString()}</td>
-                  <td>
-                    {session.sessionType === 'guest' ? (
-                      <span className="timer-display">
-                        {getRemainingTime(session) || 'Expired'}
-                      </span>
-                    ) : (
-                      <span>Unlimited</span>
-                    )}
-                  </td>
-                  <td>
-                    {['superadmin', 'admin'].includes(currentUser.role) && (
-                      <button 
-                        onClick={() => terminateSession(session.id)}
-                        className="btn-danger btn-sm"
-                      >
-                        Terminate
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={columns}
+          dataSource={activeSessions}
+          rowKey="id"
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `Total ${total} sessions`
+          }}
+          scroll={{ x: 800 }}
+          size="small"
+        />
       )}
-    </div>
+    </Card>
   );
 };
 
@@ -165,94 +246,165 @@ export const GuestQueues = ({ currentUser }) => {
   const removeFromQueue = async (queueItemId) => {
     try {
       await deleteDoc(doc(db, 'project_queues', queueItemId));
+      message.success('User removed from queue');
     } catch (error) {
       console.error('Error removing from queue:', error);
+      message.error('Failed to remove user from queue');
     }
   };
 
   const moveToFront = async (queueItem) => {
     try {
-      // Update joinedAt to current time to move to front
       await updateDoc(doc(db, 'project_queues', queueItem.id), {
-        joinedAt: new Date(Date.now() - 1000000) // Set to past time to ensure it's first
+        joinedAt: new Date(Date.now() - 1000000)
       });
+      message.success('User moved to front of queue');
     } catch (error) {
       console.error('Error moving to front:', error);
+      message.error('Failed to move user to front');
     }
   };
 
-  if (loading) return <div className="content-card">Loading queues...</div>;
+  const getRoleColor = (role) => {
+    const colors = {
+      'superadmin': 'red',
+      'admin': 'orange',
+      'user': 'blue',
+      'guest': 'green'
+    };
+    return colors[role] || 'default';
+  };
+
+  const getQueueColumns = (projectId) => [
+    {
+      title: 'Position',
+      key: 'position',
+      render: (_, __, index) => (
+        <Badge count={index + 1} style={{ backgroundColor: '#52c41a' }} />
+      ),
+      width: 80
+    },
+    {
+      title: 'User',
+      dataIndex: 'userEmail',
+      key: 'userEmail',
+      render: (email) => (
+        <Space>
+          <UserOutlined />
+          <Text strong>{email}</Text>
+        </Space>
+      )
+    },
+    {
+      title: 'Role',
+      dataIndex: 'userRole',
+      key: 'userRole',
+      render: (role) => (
+        <Tag color={getRoleColor(role)} style={{ textTransform: 'capitalize' }}>
+          {role}
+        </Tag>
+      )
+    },
+    {
+      title: 'Joined At',
+      dataIndex: 'joinedAt',
+      key: 'joinedAt',
+      render: (joinedAt) => joinedAt?.toLocaleString(),
+      responsive: ['lg']
+    },
+    {
+      title: 'Wait Time',
+      key: 'waitTime',
+      render: (_, item) => {
+        const waitTime = Math.floor((new Date() - item.joinedAt) / 60000);
+        return (
+          <Tag icon={<ClockCircleOutlined />} color={waitTime > 10 ? 'red' : 'blue'}>
+            {waitTime} min
+          </Tag>
+        );
+      }
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, item, index) => (
+        <Space>
+          {['superadmin', 'admin'].includes(currentUser.role) ? (
+            <>
+              <Button 
+                type="primary"
+                size="small"
+                icon={<ArrowUpOutlined />}
+                onClick={() => moveToFront(item)}
+              >
+                Move to Front
+              </Button>
+              <Popconfirm
+                title="Remove user from queue?"
+                onConfirm={() => removeFromQueue(item.id)}
+                okText="Yes"
+                cancelText="No"
+              >
+                <Button 
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                >
+                  Remove
+                </Button>
+              </Popconfirm>
+            </>
+          ) : (
+            <Tag color="processing">
+              Est. wait: {(index + 1) * 2} min
+            </Tag>
+          )}
+        </Space>
+      ),
+      width: 200
+    }
+  ];
+
+  if (loading) {
+    return (
+      <Card title={<Title level={3}>Project Queues</Title>}>
+        <Spin size="large" />
+      </Card>
+    );
+  }
 
   return (
-    <div className="content-card">
-      <h2>Project Queues</h2>
-      
+    <Card title={<Title level={3}>Project Queues</Title>}>
       {Object.keys(queues).length === 0 ? (
-        <p>No users in queue for any projects.</p>
+        <Empty description="No users in queue for any projects" />
       ) : (
-        Object.entries(queues).map(([projectId, queueItems]) => (
-          <div key={projectId} className="queue-section">
-            <h3>Project: {projectId}</h3>
-            <div className="queue-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Position</th>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Joined At</th>
-                    <th>Wait Time</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {queueItems.map((item, index) => (
-                    <tr key={item.id}>
-                      <td>{index + 1}</td>
-                      <td>{item.userEmail}</td>
-                      <td>
-                        <span className={`role-badge role-${item.userRole}`}>
-                          {item.userRole}
-                        </span>
-                      </td>
-                      <td>{item.joinedAt?.toLocaleString()}</td>
-                      <td>
-                        {Math.floor((new Date() - item.joinedAt) / 60000)} minutes
-                      </td>
-                      <td>
-                        <div className="action-buttons">
-                          {['superadmin', 'admin'].includes(currentUser.role) && (
-                            <>
-                              <button 
-                                onClick={() => moveToFront(item)}
-                                className="btn-primary btn-sm"
-                              >
-                                Move to Front
-                              </button>
-                              <button 
-                                onClick={() => removeFromQueue(item.id)}
-                                className="btn-danger btn-sm"
-                              >
-                                Remove
-                              </button>
-                            </>
-                          )}
-                          {currentUser.role === 'user' && (
-                            <span className="queue-info">
-                              Est. wait: {(index + 1) * 2} min
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          {Object.entries(queues).map(([projectId, queueItems]) => (
+            <Card
+              key={projectId}
+              type="inner"
+              title={
+                <Space>
+                  <Text strong>Project: </Text>
+                  <Text code>{projectId}</Text>
+                  <Badge count={queueItems.length} style={{ backgroundColor: '#1890ff' }} />
+                </Space>
+              }
+              size="small"
+            >
+              <Table
+                columns={getQueueColumns(projectId)}
+                dataSource={queueItems}
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 600 }}
+                size="small"
+              />
+            </Card>
+          ))}
+        </Space>
       )}
-    </div>
+    </Card>
   );
 };
 
@@ -264,7 +416,6 @@ export const SessionLogs = ({ currentUser }) => {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    // Listen to session logs
     const logsQuery = query(
       collection(db, 'session_logs'),
       orderBy('timestamp', 'desc')
@@ -283,7 +434,6 @@ export const SessionLogs = ({ currentUser }) => {
       setLogs(logsData);
     });
 
-    // Listen to all sessions (active and completed)
     const sessionsQuery = query(
       collection(db, 'project_sessions'),
       orderBy('startTime', 'desc')
@@ -318,96 +468,179 @@ export const SessionLogs = ({ currentUser }) => {
     return true;
   });
 
-  if (loading) return <div className="content-card">Loading session logs...</div>;
+  const getRoleColor = (role) => {
+    const colors = {
+      'superadmin': 'red',
+      'admin': 'orange',
+      'user': 'blue',
+      'guest': 'green'
+    };
+    return colors[role] || 'default';
+  };
+
+  const getActionColor = (action) => {
+    const colors = {
+      'terminated': 'red',
+      'started': 'green',
+      'completed': 'blue'
+    };
+    return colors[action] || 'default';
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'active': 'green',
+      'completed': 'blue',
+      'terminated': 'red'
+    };
+    return colors[status] || 'default';
+  };
+
+  const logsColumns = [
+    {
+      title: 'Timestamp',
+      dataIndex: 'timestamp',
+      key: 'timestamp',
+      render: (timestamp) => timestamp?.toLocaleString(),
+      sorter: (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+    },
+    {
+      title: 'Action',
+      dataIndex: 'action',
+      key: 'action',
+      render: (action) => (
+        <Tag color={getActionColor(action)} style={{ textTransform: 'capitalize' }}>
+          {action}
+        </Tag>
+      )
+    },
+    {
+      title: 'Session ID',
+      dataIndex: 'sessionId',
+      key: 'sessionId',
+      render: (sessionId) => <Text code>{sessionId}</Text>,
+      responsive: ['lg']
+    },
+    {
+      title: 'Performed By',
+      key: 'performedBy',
+      render: (_, log) => log.terminatedBy || log.performedBy || 'System'
+    }
+  ];
+
+  const sessionsColumns = [
+    {
+      title: 'User',
+      dataIndex: 'userEmail',
+      key: 'userEmail',
+      render: (email) => (
+        <Space>
+          <UserOutlined />
+          <Text strong>{email}</Text>
+        </Space>
+      )
+    },
+    {
+      title: 'Project',
+      dataIndex: 'projectId',
+      key: 'projectId',
+      render: (projectId) => <Text code>{projectId}</Text>
+    },
+    {
+      title: 'Role',
+      dataIndex: 'userRole',
+      key: 'userRole',
+      render: (role) => (
+        <Tag color={getRoleColor(role)} style={{ textTransform: 'capitalize' }}>
+          {role}
+        </Tag>
+      )
+    },
+    {
+      title: 'Start Time',
+      dataIndex: 'startTime',
+      key: 'startTime',
+      render: (startTime) => startTime?.toLocaleString(),
+      responsive: ['lg']
+    },
+    {
+      title: 'Duration',
+      key: 'duration',
+      render: (_, session) => {
+        if (session.endTime && session.startTime) {
+          const duration = Math.floor((session.endTime - session.startTime) / 60000);
+          return <Tag icon={<ClockCircleOutlined />}>{duration} min</Tag>;
+        }
+        return session.status === 'active' ? 
+          <Tag color="processing">Ongoing</Tag> : 
+          <Tag color="default">N/A</Tag>;
+      }
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Tag color={getStatusColor(status)} style={{ textTransform: 'capitalize' }}>
+          {status}
+        </Tag>
+      )
+    }
+  ];
+
+  if (loading) {
+    return (
+      <Card title={<Title level={3}>Session Logs</Title>}>
+        <Spin size="large" />
+      </Card>
+    );
+  }
 
   return (
-    <div className="content-card">
-      <h2>Session Logs</h2>
-      
-      <div className="filter-controls">
-        <label>Filter: </label>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="all">All Sessions</option>
-          <option value="active">Active Sessions</option>
-          <option value="guest">Guest Sessions</option>
-          <option value="completed">Completed Sessions</option>
-        </select>
-      </div>
+    <Card title={<Title level={3}>Session Logs</Title>}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Row gutter={[16, 16]}>
+          <Col span={24}>
+            <Card
+              type="inner"
+              title={<Title level={4}>Recent Actions</Title>}
+              size="small"
+            >
+              <Table
+                columns={logsColumns}
+                dataSource={logs.slice(0, 10)}
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 600 }}
+                size="small"
+              />
+            </Card>
+          </Col>
 
-      <div className="logs-section">
-        <h3>Recent Actions</h3>
-        <div className="logs-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Action</th>
-                <th>Session ID</th>
-                <th>Performed By</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.slice(0, 10).map(log => (
-                <tr key={log.id}>
-                  <td>{log.timestamp?.toLocaleString()}</td>
-                  <td>
-                    <span className={`action-badge action-${log.action}`}>
-                      {log.action}
-                    </span>
-                  </td>
-                  <td>{log.sessionId}</td>
-                  <td>{log.terminatedBy || log.performedBy || 'System'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="sessions-section">
-        <h3>Session History</h3>
-        <div className="sessions-table">
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Project</th>
-                <th>Role</th>
-                <th>Start Time</th>
-                <th>Duration</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSessions.slice(0, 20).map(session => (
-                <tr key={session.id}>
-                  <td>{session.userEmail}</td>
-                  <td>{session.projectId}</td>
-                  <td>
-                    <span className={`role-badge role-${session.userRole}`}>
-                      {session.userRole}
-                    </span>
-                  </td>
-                  <td>{session.startTime?.toLocaleString()}</td>
-                  <td>
-                    {session.endTime && session.startTime ? (
-                      `${Math.floor((session.endTime - session.startTime) / 60000)} min`
-                    ) : (
-                      session.status === 'active' ? 'Ongoing' : 'N/A'
-                    )}
-                  </td>
-                  <td>
-                    <span className={`status-badge status-${session.status}`}>
-                      {session.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+          <Col span={24}>
+            <Card
+              type="inner"
+              title={<Title level={4}>Session History</Title>}
+              size="small"
+            >
+              <Table
+                columns={sessionsColumns}
+                dataSource={filteredSessions.slice(0, 20)}
+                rowKey="id"
+                pagination={{
+                  pageSize: 10,
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  showTotal: (total) => `Total ${total} sessions`
+                }}
+                scroll={{ x: 800 }}
+                size="small"
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Space>
+    </Card>
   );
 };
 
@@ -444,7 +677,6 @@ export const TimeRequests = ({ currentUser }) => {
       const request = requests.find(r => r.id === requestId);
       
       if (action === 'approve' && additionalTime > 0) {
-        // Extend the session
         const sessionRef = doc(db, 'project_sessions', request.currentSessionId);
         const newEndTime = new Date(Date.now() + (additionalTime * 60000));
         
@@ -453,7 +685,6 @@ export const TimeRequests = ({ currentUser }) => {
         });
       }
 
-      // Update request status
       await updateDoc(doc(db, 'time_extension_requests', requestId), {
         status: action,
         processedBy: currentUser.email,
@@ -461,105 +692,206 @@ export const TimeRequests = ({ currentUser }) => {
         approvedTime: additionalTime
       });
 
+      message.success(`Request ${action}d successfully`);
     } catch (error) {
       console.error('Error processing request:', error);
+      message.error('Failed to process request');
     }
   };
 
-  if (loading) return <div className="content-card">Loading time requests...</div>;
+  const getStatusColor = (status) => {
+    const colors = {
+      'pending': 'orange',
+      'approve': 'green',
+      'reject': 'red'
+    };
+    return colors[status] || 'default';
+  };
+
+  const pendingColumns = [
+    {
+      title: 'User',
+      dataIndex: 'userEmail',
+      key: 'userEmail',
+      render: (email) => (
+        <Space>
+          <UserOutlined />
+          <Text strong>{email}</Text>
+        </Space>
+      )
+    },
+    {
+      title: 'Project',
+      dataIndex: 'projectId',
+      key: 'projectId',
+      render: (projectId) => <Text code>{projectId}</Text>
+    },
+    {
+      title: 'Requested Time',
+      dataIndex: 'requestedTime',
+      key: 'requestedTime',
+      render: (time) => (
+        <Tag icon={<ClockCircleOutlined />} color="blue">
+          {time} minutes
+        </Tag>
+      )
+    },
+    {
+      title: 'Request Time',
+      dataIndex: 'requestedAt',
+      key: 'requestedAt',
+      render: (requestedAt) => requestedAt?.toLocaleString(),
+      responsive: ['lg']
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, request) => (
+        ['superadmin', 'admin'].includes(currentUser.role) && (
+          <Space>
+            <Popconfirm
+              title="Approve this time extension request?"
+              onConfirm={() => handleRequest(request.id, 'approve', request.requestedTime)}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button 
+                type="primary"
+                size="small"
+                icon={<CheckOutlined />}
+              >
+                Approve
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="Reject this time extension request?"
+              onConfirm={() => handleRequest(request.id, 'reject')}
+              okText="Yes"
+              cancelText="No"
+            >
+              <Button 
+                danger
+                size="small"
+                icon={<CloseOutlined />}
+              >
+                Reject
+              </Button>
+            </Popconfirm>
+          </Space>
+        )
+      ),
+      width: 150
+    }
+  ];
+
+  const processedColumns = [
+    {
+      title: 'User',
+      dataIndex: 'userEmail',
+      key: 'userEmail',
+      render: (email) => (
+        <Space>
+          <UserOutlined />
+          <Text strong>{email}</Text>
+        </Space>
+      )
+    },
+    {
+      title: 'Project',
+      dataIndex: 'projectId',
+      key: 'projectId',
+      render: (projectId) => <Text code>{projectId}</Text>
+    },
+    {
+      title: 'Requested',
+      dataIndex: 'requestedTime',
+      key: 'requestedTime',
+      render: (time) => `${time} min`
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_, request) => (
+        <Tag color={getStatusColor(request.status)} style={{ textTransform: 'capitalize' }}>
+          {request.status}
+          {request.status === 'approve' && request.approvedTime && 
+            ` (${request.approvedTime}min)`
+          }
+        </Tag>
+      )
+    },
+    {
+      title: 'Processed By',
+      dataIndex: 'processedBy',
+      key: 'processedBy',
+      responsive: ['lg']
+    },
+    {
+      title: 'Processed At',
+      key: 'processedAt',
+      render: (_, request) => request.processedAt?.toDate()?.toLocaleString(),
+      responsive: ['lg']
+    }
+  ];
+
+  if (loading) {
+    return (
+      <Card title={<Title level={3}>Time Extension Requests</Title>}>
+        <Spin size="large" />
+      </Card>
+    );
+  }
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const processedRequests = requests.filter(r => r.status !== 'pending');
 
   return (
-    <div className="content-card">
-      <h2>Time Extension Requests</h2>
-      
-      <div className="requests-section">
-        <h3>Pending Requests ({pendingRequests.length})</h3>
-        {pendingRequests.length === 0 ? (
-          <p>No pending requests.</p>
-        ) : (
-          <div className="requests-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Project</th>
-                  <th>Requested Time</th>
-                  <th>Request Time</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingRequests.map(request => (
-                  <tr key={request.id}>
-                    <td>{request.userEmail}</td>
-                    <td>{request.projectId}</td>
-                    <td>{request.requestedTime} minutes</td>
-                    <td>{request.requestedAt?.toLocaleString()}</td>
-                    <td>
-                      {['superadmin', 'admin'].includes(currentUser.role) && (
-                        <div className="action-buttons">
-                          <button 
-                            onClick={() => handleRequest(request.id, 'approve', request.requestedTime)}
-                            className="btn-success btn-sm"
-                          >
-                            Approve
-                          </button>
-                          <button 
-                            onClick={() => handleRequest(request.id, 'reject')}
-                            className="btn-danger btn-sm"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+    <Card title={<Title level={3}>Time Extension Requests</Title>}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Card
+          type="inner"
+          title={
+            <Space>
+              <Title level={4} style={{ margin: 0 }}>Pending Requests</Title>
+              <Badge count={pendingRequests.length} style={{ backgroundColor: '#ff7875' }} />
+            </Space>
+          }
+          size="small"
+        >
+          {pendingRequests.length === 0 ? (
+            <Empty description="No pending requests" />
+          ) : (
+            <Table
+              columns={pendingColumns}
+              dataSource={pendingRequests}
+              rowKey="id"
+              pagination={false}
+              scroll={{ x: 600 }}
+              size="small"
+            />
+          )}
+        </Card>
 
-      <div className="requests-section">
-        <h3>Recent Processed Requests</h3>
-        <div className="requests-table">
-          <table>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Project</th>
-                <th>Requested</th>
-                <th>Status</th>
-                <th>Processed By</th>
-                <th>Processed At</th>
-              </tr>
-            </thead>
-            <tbody>
-              {processedRequests.slice(0, 10).map(request => (
-                <tr key={request.id}>
-                  <td>{request.userEmail}</td>
-                  <td>{request.projectId}</td>
-                  <td>{request.requestedTime} min</td>
-                  <td>
-                    <span className={`status-badge status-${request.status}`}>
-                      {request.status}
-                      {request.status === 'approve' && request.approvedTime && 
-                        ` (${request.approvedTime}min)`
-                      }
-                    </span>
-                  </td>
-                  <td>{request.processedBy}</td>
-                  <td>{request.processedAt?.toDate()?.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+        <Card
+          type="inner"
+          title={<Title level={4} style={{ margin: 0 }}>Recent Processed Requests</Title>}
+          size="small"
+        >
+          <Table
+            columns={processedColumns}
+            dataSource={processedRequests.slice(0, 10)}
+            rowKey="id"
+            pagination={{
+              pageSize: 5,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `Total ${total} requests`
+            }}
+            scroll={{ x: 700 }}
+            size="small"
+          />
+        </Card>
+      </Space>
+    </Card>
   );
 };
