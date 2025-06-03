@@ -235,31 +235,31 @@ export const ActiveGuests = ({ currentUser }) => {
         }
         return <Tag color="gold">Unlimited</Tag>;
       }
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_, session) => (
-        ['superadmin', 'admin'].includes(currentUser.role) && (
-          <Popconfirm
-            title="Are you sure you want to terminate this session?"
-            onConfirm={() => terminateSession(session.id)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button 
-              type="primary" 
-              danger 
-              size="small"
-              icon={<DeleteOutlined />}
-            >
-              Terminate
-            </Button>
-          </Popconfirm>
-        )
-      ),
-      width: 120
     }
+    // {
+    //   title: 'Actions',
+    //   key: 'actions',
+    //   render: (_, session) => (
+    //     ['superadmin', 'admin'].includes(currentUser.role) && (
+    //       <Popconfirm
+    //         title="Are you sure you want to terminate this session?"
+    //         onConfirm={() => terminateSession(session.id)}
+    //         okText="Yes"
+    //         cancelText="No"
+    //       >
+    //         <Button 
+    //           type="primary" 
+    //           danger 
+    //           size="small"
+    //           icon={<DeleteOutlined />}
+    //         >
+    //           Terminate
+    //         </Button>
+    //       </Popconfirm>
+    //     )
+    //   ),
+    //   width: 120
+    // }
   ];
 
   // Add CSS for blinking animation
