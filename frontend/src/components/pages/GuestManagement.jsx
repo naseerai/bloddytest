@@ -426,46 +426,46 @@ export const GuestQueues = ({ currentUser }) => {
           </Tag>
         );
       }
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_, item, index) => (
-        <Space>
-          {['superadmin', 'admin'].includes(currentUser.role) ? (
-            <>
-              <Button 
-                type="primary"
-                size="small"
-                icon={<ArrowUpOutlined />}
-                onClick={() => moveToFront(item)}
-              >
-                Move to Front
-              </Button>
-              <Popconfirm
-                title="Remove user from queue?"
-                onConfirm={() => removeFromQueue(item.id)}
-                okText="Yes"
-                cancelText="No"
-              >
-                <Button 
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                >
-                  Remove
-                </Button>
-              </Popconfirm>
-            </>
-          ) : (
-            <Tag color="processing">
-              Est. wait: {(index + 1) * 2} min
-            </Tag>
-          )}
-        </Space>
-      ),
-      width: 200
     }
+    // ,{
+    //   title: 'Actions',
+    //   key: 'actions',
+    //   render: (_, item, index) => (
+    //     <Space>
+    //       {['superadmin', 'admin'].includes(currentUser.role) ? (
+    //         <>
+    //           <Button 
+    //             type="primary"
+    //             size="small"
+    //             icon={<ArrowUpOutlined />}
+    //             onClick={() => moveToFront(item)}
+    //           >
+    //             Move to Front
+    //           </Button>
+    //           <Popconfirm
+    //             title="Remove user from queue?"
+    //             onConfirm={() => removeFromQueue(item.id)}
+    //             okText="Yes"
+    //             cancelText="No"
+    //           >
+    //             <Button 
+    //               danger
+    //               size="small"
+    //               icon={<DeleteOutlined />}
+    //             >
+    //               Remove
+    //             </Button>
+    //           </Popconfirm>
+    //         </>
+    //       ) : (
+    //         <Tag color="processing">
+    //           Est. wait: {(index + 1) * 2} min
+    //         </Tag>
+    //       )}
+    //     </Space>
+    //   ),
+    //   width: 200
+    // }
   ];
 
   if (loading) {
