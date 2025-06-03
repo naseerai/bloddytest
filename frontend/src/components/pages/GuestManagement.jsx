@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, 
   Button, 
@@ -40,10 +40,58 @@ import {
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-// Active Guests Component
+// Active Guests Component with Real-time Timer
 export const ActiveGuests = ({ currentUser }) => {
   const [activeSessions, setActiveSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Check for expired sessions and clean them up
+  const checkAndCleanExpiredSessions = useCallback(async () => {
+    const now = new Date();
+    const expiredSessions = activeSessions.filter(session => 
+      session.sessionType === 'guest' && 
+      session.endTime && 
+      now > session.endTime
+    );
+
+    for (const session of expiredSessions) {
+      try {
+        // Update session status to expired instead of deleting
+        await updateDoc(doc(db, 'project_sessions', session.id), {
+          status: 'expired',
+          actualEndTime: serverTimestamp()
+        });
+
+        // Log the expiration
+        await addDoc(collection(db, 'session_logs'), {
+          action: 'expired',
+          sessionId: session.id,
+          expiredAt: serverTimestamp(),
+          timestamp: serverTimestamp()
+        });
+      } catch (error) {
+        console.error('Error updating expired session:', error);
+      }
+    }
+  }, [activeSessions]);
+
+  // Check for expired sessions every 30 seconds
+  useEffect(() => {
+    if (activeSessions.length > 0) {
+      const expiredCheckInterval = setInterval(checkAndCleanExpiredSessions, 30000);
+      return () => clearInterval(expiredCheckInterval);
+    }
+  }, [activeSessions, checkAndCleanExpiredSessions]);
 
   useEffect(() => {
     const q = query(
@@ -72,7 +120,11 @@ export const ActiveGuests = ({ currentUser }) => {
 
   const terminateSession = async (sessionId) => {
     try {
-      await deleteDoc(doc(db, 'project_sessions', sessionId));
+      // Update status instead of deleting
+      await updateDoc(doc(db, 'project_sessions', sessionId), {
+        status: 'terminated',
+        actualEndTime: serverTimestamp()
+      });
       
       // Log the termination
       await addDoc(collection(db, 'session_logs'), {
@@ -91,9 +143,27 @@ export const ActiveGuests = ({ currentUser }) => {
 
   const getRemainingTime = (session) => {
     if (session.sessionType !== 'guest' || !session.endTime) return null;
-    const now = new Date();
-    const remaining = Math.max(0, Math.floor((session.endTime - now) / 1000));
-    return `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, '0')}`;
+    
+    const remaining = Math.max(0, Math.floor((session.endTime - currentTime) / 1000));
+    
+    if (remaining === 0) {
+      return 'Expired';
+    }
+    
+    const minutes = Math.floor(remaining / 60);
+    const seconds = remaining % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const getRemainingTimeColor = (session) => {
+    if (session.sessionType !== 'guest' || !session.endTime) return 'gold';
+    
+    const remaining = Math.max(0, Math.floor((session.endTime - currentTime) / 1000));
+    
+    if (remaining === 0) return 'red';
+    if (remaining < 300) return 'orange'; // Less than 5 minutes
+    if (remaining < 900) return 'yellow'; // Less than 15 minutes
+    return 'blue';
   };
 
   const getRoleColor = (role) => {
@@ -148,12 +218,19 @@ export const ActiveGuests = ({ currentUser }) => {
       render: (_, session) => {
         if (session.sessionType === 'guest') {
           const remaining = getRemainingTime(session);
-          return remaining ? (
-            <Tag icon={<ClockCircleOutlined />} color={remaining === 'Expired' ? 'red' : 'blue'}>
+          const color = getRemainingTimeColor(session);
+          
+          return (
+            <Tag 
+              icon={<ClockCircleOutlined />} 
+              color={color}
+              style={{ 
+                fontWeight: remaining === 'Expired' ? 'bold' : 'normal',
+                animation: color === 'orange' ? 'blink 1s infinite' : 'none'
+              }}
+            >
               {remaining}
             </Tag>
-          ) : (
-            <Tag color="red">Expired</Tag>
           );
         }
         return <Tag color="gold">Unlimited</Tag>;
@@ -185,6 +262,22 @@ export const ActiveGuests = ({ currentUser }) => {
     }
   ];
 
+  // Add CSS for blinking animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0.5; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   return (
     <Card title={<Title level={3}>Active Guest Sessions</Title>} loading={loading}>
       {activeSessions.length === 0 ? (
@@ -208,10 +301,20 @@ export const ActiveGuests = ({ currentUser }) => {
   );
 };
 
-// Guest Queues Component
+// Guest Queues Component (Enhanced with real-time wait time)
 export const GuestQueues = ({ currentUser }) => {
   const [queues, setQueues] = useState({});
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every minute for wait time calculation
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const q = query(
@@ -316,7 +419,7 @@ export const GuestQueues = ({ currentUser }) => {
       title: 'Wait Time',
       key: 'waitTime',
       render: (_, item) => {
-        const waitTime = Math.floor((new Date() - item.joinedAt) / 60000);
+        const waitTime = Math.floor((currentTime - item.joinedAt) / 60000);
         return (
           <Tag icon={<ClockCircleOutlined />} color={waitTime > 10 ? 'red' : 'blue'}>
             {waitTime} min
@@ -482,7 +585,8 @@ export const SessionLogs = ({ currentUser }) => {
     const colors = {
       'terminated': 'red',
       'started': 'green',
-      'completed': 'blue'
+      'completed': 'blue',
+      'expired': 'orange'
     };
     return colors[action] || 'default';
   };
@@ -491,7 +595,8 @@ export const SessionLogs = ({ currentUser }) => {
     const colors = {
       'active': 'green',
       'completed': 'blue',
-      'terminated': 'red'
+      'terminated': 'red',
+      'expired': 'orange'
     };
     return colors[status] || 'default';
   };
