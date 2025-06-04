@@ -451,33 +451,33 @@ export const GuestQueues = ({ currentUser }) => {
       render: (joinedAt) => joinedAt?.toLocaleString(),
       responsive: ['lg']
     },
-    {
-      title: 'Wait Time',
-      key: 'waitTime',
-      render: (_, item) => {
-        const waitTime = Math.floor((currentTime - item.joinedAt) / 60000);
-        return (
-          <Tag icon={<ClockCircleOutlined />} color={waitTime > 10 ? 'red' : 'blue'}>
-            {waitTime} min
-          </Tag>
-        );
-      }
-    },
-    {
+    // {
+    //   title: 'Wait Time',
+    //   key: 'waitTime',
+    //   render: (_, item) => {
+    //     const waitTime = Math.floor((currentTime - item.joinedAt) / 60000);
+    //     return (
+    //       <Tag icon={<ClockCircleOutlined />} color={waitTime > 10 ? 'red' : 'blue'}>
+    //         {waitTime} min
+    //       </Tag>
+    //     );
+    //   }
+    // }
+    ,{
       title: 'Actions',
       key: 'actions',
       render: (_, item, index) => (
         <Space>
           {['superadmin', 'admin'].includes(currentUser.role) ? (
             <>
-              <Button 
+              {/* <Button 
                 type="primary"
                 size="small"
                 icon={<ArrowUpOutlined />}
                 onClick={() => moveToFront(item)}
               >
                 Move to Front
-              </Button>
+              </Button> */}
               <Popconfirm
                 title="Remove user from queue?"
                 onConfirm={() => removeFromQueue(item.id)}
