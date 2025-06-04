@@ -34,7 +34,8 @@ import {
   doc, 
   updateDoc,
   serverTimestamp,
-  addDoc
+  addDoc,
+  getDoc
 } from 'firebase/firestore';
 
 const { Title, Text } = Typography;
@@ -118,29 +119,64 @@ export const ActiveGuests = ({ currentUser }) => {
     return () => unsubscribe();
   }, []);
 
-  const terminateSession = async (sessionId) => {
-    try {
-      // Update status instead of deleting
-      await updateDoc(doc(db, 'project_sessions', sessionId), {
-        status: 'terminated',
-        actualEndTime: serverTimestamp()
-      });
-      
-      // Log the termination
-      await addDoc(collection(db, 'session_logs'), {
-        action: 'terminated',
-        sessionId,
-        terminatedBy: currentUser.email,
-        timestamp: serverTimestamp()
-      });
-      
-      message.success('Session terminated successfully');
-    } catch (error) {
-      console.error('Error terminating session:', error);
-      message.error('Failed to terminate session');
-    }
-  };
 
+const terminateSession = async (sessionId) => {
+  // Check permissions
+  if (!['superadmin', 'admin'].includes(currentUser.role)) {
+    message.error('You do not have permission to terminate sessions.');
+    return;
+  }
+
+  try {
+    // Get session document first
+    const sessionDoc = await getDoc(doc(db, 'project_sessions', sessionId));
+    
+    if (!sessionDoc.exists()) {
+      message.error('Session not found.');
+      return;
+    }
+    
+    const sessionData = sessionDoc.data();
+    const terminatedUserId = sessionData.userId;
+    const projectId = sessionData.projectId;
+    
+    // Delete the session document (this actually terminates the session)
+    await deleteDoc(doc(db, 'project_sessions', sessionId));
+    
+    // Send notification to the terminated user
+    const notificationData = {
+      targetUserId: terminatedUserId,
+      projectId: projectId,
+      message: `Your session has been terminated by ${currentUser.role}: ${currentUser.email}`,
+      priority: 'high',
+      type: 'session_terminated',
+      createdAt: serverTimestamp(),
+      terminatedBy: currentUser.id || currentUser.email,
+      terminatedByRole: currentUser.role
+    };
+    
+    await addDoc(collection(db, 'user_notifications'), notificationData);
+    
+    // Log the termination
+    await addDoc(collection(db, 'session_logs'), {
+      action: 'terminated',
+      sessionId,
+      terminatedBy: currentUser.email,
+      terminatedUserId: terminatedUserId,
+      projectId: projectId,
+      timestamp: serverTimestamp()
+    });
+    
+    message.success(`Session terminated successfully for user: ${sessionData.userEmail}`);
+    
+    // Process queue to allow next user (if you have this function)
+    // await processQueue(projectId);
+    
+  } catch (error) {
+    console.error('Error terminating session:', error);
+    message.error('Failed to terminate session. Please try again.');
+  }
+};
   const getRemainingTime = (session) => {
     if (session.sessionType !== 'guest' || !session.endTime) return null;
     
@@ -236,30 +272,30 @@ export const ActiveGuests = ({ currentUser }) => {
         return <Tag color="gold">Unlimited</Tag>;
       }
     }
-    // {
-    //   title: 'Actions',
-    //   key: 'actions',
-    //   render: (_, session) => (
-    //     ['superadmin', 'admin'].includes(currentUser.role) && (
-    //       <Popconfirm
-    //         title="Are you sure you want to terminate this session?"
-    //         onConfirm={() => terminateSession(session.id)}
-    //         okText="Yes"
-    //         cancelText="No"
-    //       >
-    //         <Button 
-    //           type="primary" 
-    //           danger 
-    //           size="small"
-    //           icon={<DeleteOutlined />}
-    //         >
-    //           Terminate
-    //         </Button>
-    //       </Popconfirm>
-    //     )
-    //   ),
-    //   width: 120
-    // }
+    ,{
+      title: 'Actions',
+      key: 'actions',
+      render: (_, session) => (
+        ['superadmin', 'admin'].includes(currentUser.role) && (
+          <Popconfirm
+            title="Are you sure you want to terminate this session?"
+            onConfirm={() => terminateSession(session.id)}
+            okText="Yes"
+            cancelText="No"
+          >
+            <Button 
+              type="primary" 
+              danger 
+              size="small"
+              icon={<DeleteOutlined />}
+            >
+              Terminate
+            </Button>
+          </Popconfirm>
+        )
+      ),
+      width: 120
+    }
   ];
 
   // Add CSS for blinking animation
@@ -749,6 +785,7 @@ export const SessionLogs = ({ currentUser }) => {
   );
 };
 
+//GuestMangament.jsx
 // Time Extension Requests Component
 export const TimeRequests = ({ currentUser }) => {
   const [requests, setRequests] = useState([]);
@@ -778,31 +815,47 @@ export const TimeRequests = ({ currentUser }) => {
   }, []);
 
   const handleRequest = async (requestId, action, additionalTime = 0) => {
-    try {
-      const request = requests.find(r => r.id === requestId);
+  try {
+    const request = requests.find(r => r.id === requestId);
+    
+    if (action === 'approve' && additionalTime > 0) {
+      const sessionRef = doc(db, 'project_sessions', request.currentSessionId);
+      const sessionDoc = await getDoc(sessionRef);
+      const sessionData = sessionDoc.data();
       
-      if (action === 'approve' && additionalTime > 0) {
-        const sessionRef = doc(db, 'project_sessions', request.currentSessionId);
-        const newEndTime = new Date(Date.now() + (additionalTime * 60000));
-        
-        await updateDoc(sessionRef, {
-          endTime: newEndTime
-        });
-      }
-
-      await updateDoc(doc(db, 'time_extension_requests', requestId), {
-        status: action,
-        processedBy: currentUser.email,
-        processedAt: serverTimestamp(),
-        approvedTime: additionalTime
+      // Calculate new end time based on current time
+      const newEndTime = new Date(Date.now() + (additionalTime * 60000));
+      
+      await updateDoc(sessionRef, {
+        endTime: newEndTime
       });
 
-      message.success(`Request ${action}d successfully`);
-    } catch (error) {
-      console.error('Error processing request:', error);
-      message.error('Failed to process request');
+      // Send notification to user
+      await addDoc(collection(db, 'user_notifications'), {
+        targetUserId: request.userId,
+        projectId: request.projectId,
+        message: `Your time extension request has been approved! Session extended by ${additionalTime} minutes.`,
+        priority: 'high',
+        type: 'time_extension_approved',
+        createdAt: serverTimestamp(),
+        sessionId: request.currentSessionId,
+        extendedMinutes: additionalTime
+      });
     }
-  };
+
+    await updateDoc(doc(db, 'time_extension_requests', requestId), {
+      status: action,
+      processedBy: currentUser.email,
+      processedAt: serverTimestamp(),
+      approvedTime: additionalTime
+    });
+
+    message.success(`Request ${action}d successfully`);
+  } catch (error) {
+    console.error('Error processing request:', error);
+    message.error('Failed to process request');
+  }
+};
 
   const getStatusColor = (status) => {
     const colors = {

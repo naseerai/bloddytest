@@ -50,9 +50,9 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
   const [emailSending, setEmailSending] = useState(false);
 
   // EmailJS configuration - Replace with your actual values
-  const EMAIL_SERVICE_ID = 'service_yzg8o0c';
-  const EMAIL_TEMPLATE_ID = 'template_dhmdo1g';
-  const EMAIL_PUBLIC_KEY = 'jW2qEXXMeqrR_0nB7';
+  const EMAIL_SERVICE_ID = 'service_65hrv3r';
+  const EMAIL_TEMPLATE_ID = 'template_ci2yvrk';
+  const EMAIL_PUBLIC_KEY = 'cDWCunjBhwP7NkO2p';
 
   // Initialize EmailJS
   useEffect(() => {
@@ -79,57 +79,94 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
     return password;
   };
 
-  // Send email with credentials
-  const sendCredentialsEmail = async (userEmail, userName, password, userRole) => {
-    setEmailSending(true);
-    try {
-      const templateParams = {
-        to_email: userEmail,
-        to_name: userName,
-        user_email: userEmail,
-        user_password: password,
-        user_role: userRole,
-        from_name: currentUser.name || 'Admin'
-      };
+const sendCredentialsEmail = async (userEmail, userName, password, userRole) => {
+  setEmailSending(true);
+  try {
+    // Template parameters - make sure these match your EmailJS template variables
+    const templateParams = {
+      to_email: userEmail,           // Must match {{to_email}} in template
+      to_name: userName,             // Must match {{to_name}} in template
+      user_email: userEmail,         // For displaying in email body
+      user_password: password,       // For displaying in email body
+      user_role: userRole,          // For displaying in email body
+      from_name: currentUser?.name || 'Admin',
+      company_name: 'Your Company Name',
+      website_link: 'http://localhost:5173/',
+      // Add a subject line
+      subject: `Welcome! Your ${userRole} account has been created`
+    };
 
-      await emailjs.send(
-        EMAIL_SERVICE_ID,
-        EMAIL_TEMPLATE_ID,
-        templateParams
-      );
+    console.log('Sending email with params:', templateParams);
 
-      message.success('Login credentials sent to user via email');
-    } catch (error) {
-      console.error('Failed to send email:', error);
-      message.error('Failed to send email with credentials');
-      
-      // Show credentials in modal as fallback
-      Modal.info({
-        title: 'Email Failed - Please Share Manually',
-        content: (
-          <div>
-            <p>Login credentials for {userEmail}:</p>
-            <div style={{ 
-              background: '#f5f5f5', 
-              padding: '8px 12px', 
-              borderRadius: '4px', 
-              fontFamily: 'monospace',
-              fontSize: '14px',
-              margin: '8px 0'
-            }}>
-              <strong>Email:</strong> {userEmail}<br/>
+    // Send email - make sure you're using the correct IDs
+    const result = await emailjs.send(
+      "service_65hrv3r",      // Your service ID
+      "template_ci2yvrk",     // Your template ID
+      templateParams,
+      "cDWCunjBhwP7NkO2p"       // Replace with your actual public key
+    );
+
+    console.log('Email sent successfully:', result);
+    message.success('Login credentials sent to user via email');
+    return true;
+    
+  } catch (error) {
+    console.error('Failed to send email:', error);
+    
+    // Enhanced error handling
+    if (error.status === 422) {
+      console.error('Template configuration issue. Check these in your EmailJS template:');
+      console.error('- "To email" field should be: {{to_email}}');
+      console.error('- "To name" field should be: {{to_name}}');
+      message.error('Email template configuration error. Please check the "To" field in your EmailJS template.');
+    } else if (error.status === 400) {
+      message.error('Bad request. Check your service ID and template ID.');
+    } else if (error.status === 401) {
+      message.error('Unauthorized. Check your EmailJS public key.');
+    } else if (error.status === 404) {
+      message.error('Service or template not found. Check your IDs.');
+    } else {
+      message.error(`Failed to send email: ${error.text || error.message || 'Unknown error'}`);
+    }
+    
+    // Fallback modal with credentials
+    Modal.info({
+      title: 'Email Failed - Please Share Manually',
+      content: (
+        <div>
+          <p><strong>Login credentials for {userEmail}:</strong></p>
+          <div style={{ 
+            background: '#f5f5f5', 
+            padding: '12px', 
+            borderRadius: '6px', 
+            fontFamily: 'monospace',
+            fontSize: '14px',
+            margin: '12px 0',
+            border: '1px solid #d9d9d9'
+          }}>
+            <div style={{ marginBottom: '8px' }}>
+              <strong>Email:</strong> {userEmail}
+            </div>
+            <div style={{ marginBottom: '8px' }}>
               <strong>Password:</strong> {password}
             </div>
-            <p style={{ fontSize: '12px', color: '#666' }}>
-              Please share these credentials with the user manually.
-            </p>
+            <div>
+              <strong>Role:</strong> {userRole}
+            </div>
           </div>
-        ),
-      });
-    } finally {
-      setEmailSending(false);
-    }
-  };
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '12px' }}>
+            Please share these credentials with the user manually.
+          </p>
+        </div>
+      ),
+      width: 500,
+    });
+    return false;
+  } finally {
+    setEmailSending(false);
+  }
+};
+
 
   // Upload image to Cloudinary
   const uploadToCloudinary = async (file) => {
@@ -251,16 +288,22 @@ const UserManagement = ({ currentUser, userType = 'user' }) => {
         await updateDoc(userRef, userData);
         message.success(`${userType === 'admin' ? 'Admin' : 'User'} updated successfully`);
       } else {
+        // Add new user to database first
         await addDoc(usersRef, userData);
         message.success(`${userType === 'admin' ? 'Admin' : 'User'} added successfully`);
         
-        // Send email with credentials for new users
-        await sendCredentialsEmail(
+        // Then send email with credentials for new users
+        const emailSent = await sendCredentialsEmail(
           cleanedValues.email,
           cleanedValues.name,
           password,
           userData.role
         );
+
+        // Additional success message if email was sent
+        if (emailSent) {
+          message.success('User credentials have been emailed successfully!', 5);
+        }
       }
 
       fetchUsers();
