@@ -395,66 +395,23 @@ useEffect(() => {
             return false;
           }).length;
           
-          setQueuePosition(usersAhead + 1);
+          // Update per-user, per-project queue info
+          setUserQueueInfo(prev => ({
+            ...prev,
+            [project.id]: {
+              position: usersAhead + 1,
+              estimated: (usersAhead + 1) * 60
+            }
+          }));
         } else {
-          setQueuePosition(null);
+          setUserQueueInfo(prev => ({
+            ...prev,
+            [project.id]: null
+          }));
         }
       });
     });
-
-    // Listen to queues with position updates
-    const queueQuery = query(
-      collection(db, 'project_queues'),
-      where('projectId', '==', project.id),
-      orderBy('joinedAt', 'asc')
-    );
-    
-    queueUnsubscribes.current[project.id] = onSnapshot(queueQuery, (snapshot) => {
-      const queueItems = [];
-      snapshot.forEach(doc => {
-        queueItems.push({ id: doc.id, ...doc.data() });
-      });
-      
-      setQueues(prev => ({
-        ...prev,
-        [project.id]: queueItems
-      }));
-
-      // Update queue position if user is in queue
-      const userInQueue = queueItems.find(item => item.userId === currentUser.id);
-      if (userInQueue) {
-  const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
-  const currentUserPriority = roleHierarchy[currentUser.role] || 5;
-
-  const usersAhead = queueItems.filter(queueUser => {
-    const queueUserPriority = roleHierarchy[queueUser.userRole] || 5;
-    if (queueUserPriority < currentUserPriority) return true;
-    if (queueUserPriority === currentUserPriority) {
-      const queueUserTime = queueUser.joinedAt?.toDate ? queueUser.joinedAt.toDate() : new Date(queueUser.joinedAt);
-      const userTime = userInQueue.joinedAt?.toDate ? userInQueue.joinedAt.toDate() : new Date(userInQueue.joinedAt);
-      return queueUserTime < userTime;
-    }
-    return false;
-  }).length;
-
-  // Update per-user, per-project queue info
-  setUserQueueInfo(prev => ({
-    ...prev,
-    [project.id]: {
-      position: usersAhead + 1,
-      estimated: (usersAhead + 1) * 60
-    }
-  }));
-} else {
-  setUserQueueInfo(prev => ({
-    ...prev,
-    [project.id]: null
-  }));
-}
-
-    });
   };
-};
 
   const cleanupListeners = () => {
     Object.values(sessionUnsubscribes.current).forEach(unsub => unsub());
@@ -924,7 +881,6 @@ const requestExtendedTime = async (additionalMinutes) => {
       }
     }
   };
-
   const handleBackToList = () => {
     if (activeSession) {
       endSession(activeSession.id);
@@ -954,14 +910,12 @@ const requestExtendedTime = async (additionalMinutes) => {
           <h3>Dashboard is Busy</h3>
           <p>The project dashboard is currently being used by another user.</p>
           <p>Do you want to join the queue?</p>
-          {/* {userQueueInfo[pendingProjectAccess] ? (
-  <div className="queue-info">
-    <p>Your position in queue: {userQueueInfo[pendingProjectAccess].position}</p>
-    <p>Estimated wait time: {userQueueInfo[pendingProjectAccess].estimated} seconds</p>
-  </div>
-) : (
-  <p>A high-priority user is using the dashboard. It may take longer than usual.</p>
-)} */}
+          {queuePosition && (
+            <div className="queue-info">
+              <p>Your position in queue: {queuePosition}</p>
+              <p>Estimated wait time: {queuePosition * 2} minutes</p>
+            </div>
+          )}
           <div className="modal-actions">
             <button onClick={() => joinQueue(pendingProjectAccess)} className="btn-primary">
               Join Queue
@@ -984,21 +938,19 @@ const requestExtendedTime = async (additionalMinutes) => {
           </button>
           
           {activeSession && currentUser.role === 'guest' && (
-  <div className="session-timer">
-    <span className="timer-text">
-      Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-    </span>
-    <button 
-      onClick={() => requestExtendedTime(5)} 
-      className="extend-time-btn"
-      disabled={countdown < 10}
-    >
-      Request +5 min
-    </button>
-    {/* Add this for debugging */}
-    
-  </div>
-)}
+            <div className="session-timer">
+              <span className="timer-text">
+                Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </span>
+              <button 
+                onClick={() => requestExtendedTime(5)} 
+                className="extend-time-btn"
+                disabled={countdown < 10}
+              >
+                Request +5 min
+              </button>
+            </div>
+          )}
         </div>
         
         <h2>{selectedProject.name}</h2>
@@ -1060,8 +1012,6 @@ const requestExtendedTime = async (additionalMinutes) => {
             const status = getProjectStatus(project.id);
             const userHasActiveSession = Object.values(projectSessions[project.id] || {})
               .some(session => session.userId === currentUser.id && session.status === 'active');
-            const info = userQueueInfo[project.id]; // <- 🟢 ADD THIS
-
             
             return (
               <div key={project.id} className="project-card">
@@ -1130,15 +1080,6 @@ const requestExtendedTime = async (additionalMinutes) => {
                     </ul>
                   </div>
                 )}
-                {info && currentUser.role === 'guest' && (
-  <div className="guest-queue-indicator">
-    <p style={{ fontSize: '14px', color: '#555' }}>
-      ⏳ You are <strong>#{info.position}</strong> in queue<br />
-      Est. Wait: <strong>{info.estimated} seconds</strong>
-    </p>
-  </div>
-)}
-
                 
                 <button 
                   className="view-details-btn"
@@ -1156,6 +1097,6 @@ const requestExtendedTime = async (additionalMinutes) => {
       )}
     </div>
   );
-
+};
 
 export default Devices;
