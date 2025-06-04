@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { realtimeDb } from '../firebase';
 import { ref, onValue } from 'firebase/database';
-import { db } from '../firebase';
+import { db } from '../firebase'; // Firestore
 import { 
   collection, 
   doc, 
@@ -15,8 +15,7 @@ import {
   serverTimestamp,
   addDoc,
   getDocs,
-  getDoc,
-  limit
+  getDoc 
 } from 'firebase/firestore';
 import '../styles/Devices.css';
 
@@ -36,11 +35,11 @@ const Devices = ({ currentUser }) => {
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [pendingProjectAccess, setPendingProjectAccess] = useState(null);
   
+  // Refs for cleanup
   const sessionUnsubscribes = useRef({});
   const queueUnsubscribes = useRef({});
   const countdownInterval = useRef(null);
 
-  // Load projects from Realtime Database
   useEffect(() => {
     if (!currentUser) {
       setError('User not authenticated');
@@ -48,6 +47,7 @@ const Devices = ({ currentUser }) => {
       return;
     }
 
+    // Load projects from Realtime Database
     const projectsRef = ref(realtimeDb, 'projects');
     const unsubscribe = onValue(projectsRef, (snapshot) => {
       try {
@@ -87,211 +87,83 @@ const Devices = ({ currentUser }) => {
     return () => cleanupListeners();
   }, [projects]);
   
-  // Monitor active session in real-time
-  useEffect(() => {
-  if (!selectedProject || !currentUser) return;
+useEffect(() => {
+  if (!currentUser) return;
 
-  const sessionQuery = query(
-    collection(db, 'project_sessions'),
-    where('userId', '==', currentUser.id),
-    where('projectId', '==', selectedProject.id),
-    where('status', '==', 'active'),
-    orderBy('startTime', 'desc'),
-    limit(1)
+  // Keep track of processed notifications to avoid duplicates
+  const processedNotifications = new Set();
+
+  const notificationsQuery = query(
+    collection(db, 'user_notifications'),
+    where('targetUserId', '==', currentUser.id),
+    orderBy('createdAt', 'desc')
   );
 
-  const unsubscribe = onSnapshot(sessionQuery, (snapshot) => {
-    if (!snapshot.empty) {
-      const sessionDoc = snapshot.docs[0];
-      const sessionData = sessionDoc.data();
-      
-      console.log('Session data updated from Firestore:', sessionData);
-      
-      const processedSessionData = {
-        id: sessionDoc.id,
-        ...sessionData,
-        startTime: sessionData.startTime?.toDate ? sessionData.startTime.toDate() : sessionData.startTime,
-        endTime: sessionData.endTime?.toDate ? sessionData.endTime.toDate() : sessionData.endTime
-      };
-      
-      // Force update the active session
-      setActiveSession(processedSessionData);
-      
-      console.log('Active session updated:', processedSessionData);
-    } else {
-      console.log('No active session found');
-      setActiveSession(null);
-    }
-  }, (error) => {
-    console.error('Error in session listener:', error);
-  });
-
-  return () => unsubscribe();
-}, [selectedProject, currentUser]);
-
-useEffect(() => {
-  if (!activeSession?.id) return;
-
-  console.log('Setting up direct session listener for:', activeSession.id);
-
-  const sessionDocRef = doc(db, 'project_sessions', activeSession.id);
-  
-  const unsubscribe = onSnapshot(sessionDocRef, (docSnapshot) => {
-    if (docSnapshot.exists()) {
-      const sessionData = docSnapshot.data();
-      
-      console.log('Direct session update received:', sessionData);
-      
-      const updatedSession = {
-        id: docSnapshot.id,
-        ...sessionData,
-        startTime: sessionData.startTime?.toDate ? sessionData.startTime.toDate() : sessionData.startTime,
-        endTime: sessionData.endTime?.toDate ? sessionData.endTime.toDate() : sessionData.endTime
-      };
-      
-      // Update the active session state
-      setActiveSession(updatedSession);
-      
-      console.log('Session state updated with new data:', updatedSession);
-    } else {
-      console.log('Session document no longer exists');
-      setActiveSession(null);
-    }
-  }, (error) => {
-    console.error('Error in direct session listener:', error);
-  });
-
-  return () => {
-    console.log('Cleaning up direct session listener');
-    unsubscribe();
-  };
-}, [activeSession?.id]);
-  // Update countdown timer based on session endTime
-  useEffect(() => {
-  if (!activeSession || !activeSession.endTime) {
-    setCountdown(0);
-    if (countdownInterval.current) {
-      clearInterval(countdownInterval.current);
-      countdownInterval.current = null;
-    }
-    return;
-  }
-
-  const updateCountdown = () => {
-    const now = new Date();
-    let endTime;
-    
-    // Handle different timestamp formats
-    if (activeSession.endTime?.toDate) {
-      endTime = activeSession.endTime.toDate();
-    } else if (activeSession.endTime instanceof Date) {
-      endTime = activeSession.endTime;
-    } else {
-      endTime = new Date(activeSession.endTime);
-    }
-    
-    const timeLeft = Math.max(0, Math.floor((endTime - now) / 1000));
-    
-    console.log('Countdown update:', {
-      endTime: endTime,
-      now: now,
-      timeLeft: timeLeft
-    });
-    
-    setCountdown(timeLeft);
-    
-    if (timeLeft <= 0 && activeSession.status === 'active') {
-      console.log('Session expired, ending session');
-      endSession(activeSession.id);
-    }
-  };
-
-  // Update immediately
-  updateCountdown();
-  
-  // Clear any existing interval
-  if (countdownInterval.current) {
-    clearInterval(countdownInterval.current);
-  }
-  
-  // Set new interval
-  const interval = setInterval(updateCountdown, 1000);
-  countdownInterval.current = interval;
-
-  return () => {
-    if (countdownInterval.current) {
-      clearInterval(countdownInterval.current);
-      countdownInterval.current = null;
-    }
-  };
-}, [activeSession]); // Add activeSession as dependency
-
-  // Notification listener
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const processedNotifications = new Set();
-
-    const notificationsQuery = query(
-      collection(db, 'user_notifications'),
-      where('targetUserId', '==', currentUser.id),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === 'added') {
-          const notification = { id: change.doc.id, ...change.doc.data() };
-          
-          if (processedNotifications.has(notification.id)) {
-            return;
-          }
-          
-          processedNotifications.add(notification.id);
-          
-          if (notification.type === 'session_started') {
-            if (currentUser.role === 'guest' && notification.autoRedirect) {
-              alert('Your session has started! Redirecting to project dashboard...');
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
-            }
+  const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+    snapshot.docChanges().forEach(async (change) => {
+      if (change.type === 'added') {
+        const notification = { id: change.doc.id, ...change.doc.data() };
+        
+        // Skip if we've already processed this notification
+        if (processedNotifications.has(notification.id)) {
+          return;
+        }
+        
+        // Mark as processed
+        processedNotifications.add(notification.id);
+        
+        if (notification.type === 'session_started') {
+          // For guests, always auto-redirect
+          if (currentUser.role === 'guest' && notification.autoRedirect) {
+            alert('Your session has started! Redirecting to project dashboard...');
             
-            try {
-              await deleteDoc(doc(db, 'user_notifications', notification.id));
-            } catch (error) {
-              console.error('Error deleting session_started notification:', error);
-            }
-          }
-          
-          if (notification.type === 'session_terminated') {
-            alert('Your session has been terminated by an administrator.');
-            setActiveSession(null);
-            setSelectedProject(null);
-            setCountdown(0);
-            
-            if (countdownInterval.current) {
-              clearInterval(countdownInterval.current);
-            }
-            
-            try {
-              await deleteDoc(doc(db, 'user_notifications', notification.id));
-            } catch (error) {
-              console.error('Error deleting session_terminated notification:', error);
-            }
-            
+            // Force a page reload to ensure proper state sync
             setTimeout(() => {
               window.location.reload();
             }, 1000);
           }
+          
+          // Delete the notification after processing
+          try {
+            await deleteDoc(doc(db, 'user_notifications', notification.id));
+          } catch (error) {
+            console.error('Error deleting session_started notification:', error);
+          }
         }
-      });
+        
+        // Handle session termination notifications
+        if (notification.type === 'session_terminated') {
+          alert('Your session has been terminated by an administrator.');
+          
+          // Clear local session state immediately
+          setActiveSession(null);
+          setSelectedProject(null);
+          setCountdown(0);
+          
+          if (countdownInterval.current) {
+            clearInterval(countdownInterval.current);
+          }
+          
+          // Delete the notification to prevent re-triggering
+          try {
+            await deleteDoc(doc(db, 'user_notifications', notification.id));
+          } catch (error) {
+            console.error('Error deleting session_terminated notification:', error);
+          }
+          
+          // Force redirect back to devices list
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
+      }
     });
+  });
 
-    return () => unsubscribe();
-  }, [currentUser, projects]);
+  return () => unsubscribe();
+}, [currentUser, projects]);
 
-  // Check for existing user sessions
+  // Check for existing user sessions when component mounts or projects change
   useEffect(() => {
     if (currentUser && projects.length > 0) {
       checkForExistingUserSession();
@@ -300,6 +172,7 @@ useEffect(() => {
 
   const checkForExistingUserSession = async () => {
     try {
+      // Query for active sessions belonging to current user
       const userSessionQuery = query(
         collection(db, 'project_sessions'),
         where('userId', '==', currentUser.id),
@@ -312,10 +185,25 @@ useEffect(() => {
         const sessionDoc = snapshot.docs[0];
         const sessionData = { id: sessionDoc.id, ...sessionDoc.data() };
         
+        // Find the project for this session
         const project = projects.find(p => p.id === sessionData.projectId);
         if (project) {
           setActiveSession(sessionData);
           setSelectedProject(project);
+          
+          // If it's a guest session with remaining time, restart countdown
+          if (sessionData.sessionType === 'guest' && sessionData.endTime) {
+            const endTime = sessionData.endTime.toDate ? sessionData.endTime.toDate() : new Date(sessionData.endTime);
+            const remainingTime = Math.max(0, Math.floor((endTime - new Date()) / 1000));
+            
+            if (remainingTime > 0) {
+              setCountdown(remainingTime);
+              startCountdownTimer(sessionDoc.id);
+            } else {
+              // Session has expired, clean it up
+              await endSession(sessionDoc.id);
+            }
+          }
         }
       }
     } catch (error) {
@@ -323,95 +211,178 @@ useEffect(() => {
     }
   };
 
-  const setupProjectListeners = () => {
-    projects.forEach(project => {
-      const sessionQuery = query(
-        collection(db, 'project_sessions'),
-        where('projectId', '==', project.id)
-      );
+  const startCountdownTimer = (sessionId) => {
+  if (countdownInterval.current) {
+    clearInterval(countdownInterval.current);
+  }
+  
+  countdownInterval.current = setInterval(() => {
+    setCountdown(prev => {
+      if (prev <= 1) {
+        console.log('Guest session timeout, ending session...');
+        endSession(sessionId); // This will automatically process the queue
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+};
+
+const getProjectButtonText = (project, status, userHasActiveSession) => {
+  const userInQueue = (queues[project.id] || []).find(item => item.userId === currentUser.id);
+  
+  if (userInQueue) {
+    return `In Queue (Position: ${queuePosition || '...'})`;
+  }
+  
+  if (userHasActiveSession && status.activeSession?.userId === currentUser.id) {
+    return 'Continue Session';
+  }
+  
+  if (!status.isOccupied) {
+    return 'Access Project';
+  }
+  
+  // Project is occupied - everyone must join queue
+  return 'Join Queue';
+};
+
+
+const isProjectButtonDisabled = (project, status, userHasActiveSession) => {
+  // Disable if user has an active session for a DIFFERENT project
+  if (userHasActiveSession && status.activeSession?.userId !== currentUser.id) {
+    return true;
+  }
+  
+  // Disable if user is already in queue for this project
+  const userInQueue = (queues[project.id] || []).find(item => item.userId === currentUser.id);
+  if (userInQueue) {
+    return true;
+  }
+  
+  return false;
+};
+
+// Add a function to leave queue (optional)
+const leaveQueue = async (projectId) => {
+  try {
+    const userQueueItem = (queues[projectId] || []).find(item => item.userId === currentUser.id);
+    if (userQueueItem) {
+      await deleteDoc(doc(db, 'project_queues', userQueueItem.id));
+      alert('You have left the queue.');
+    }
+  } catch (error) {
+    console.error('Error leaving queue:', error);
+  }
+};
+
+const setupProjectListeners = () => {
+  projects.forEach(project => {
+    // Listen to active sessions with change detection
+    const sessionQuery = query(
+      collection(db, 'project_sessions'),
+      where('projectId', '==', project.id)
+    );
+    
+    sessionUnsubscribes.current[project.id] = onSnapshot(sessionQuery, (snapshot) => {
+      const sessions = {};
+      const changes = snapshot.docChanges();
       
-      sessionUnsubscribes.current[project.id] = onSnapshot(sessionQuery, (snapshot) => {
-        const sessions = {};
-        const changes = snapshot.docChanges();
-        
-        snapshot.forEach(doc => {
-          sessions[doc.id] = { id: doc.id, ...doc.data() };
-        });
-        
-        changes.forEach(change => {
-          if (change.type === 'removed') {
-            console.log('Session ended for project:', project.id);
-          }
-          if (change.type === 'added') {
-            console.log('New session started for project:', project.id);
-            const newSession = { id: change.doc.id, ...change.doc.data() };
-            
-            if (newSession.userId === currentUser.id) {
-              setActiveSession(newSession);
-              const projectData = projects.find(p => p.id === project.id);
-              if (projectData && !selectedProject) {
-                setSelectedProject(projectData);
+      snapshot.forEach(doc => {
+        sessions[doc.id] = { id: doc.id, ...doc.data() };
+      });
+      
+      // Check for session removals (when someone exits)
+      changes.forEach(change => {
+        if (change.type === 'removed') {
+          console.log('Session ended for project:', project.id);
+          // Session was removed, queue should be processed automatically by endSession
+        }
+        if (change.type === 'added') {
+          console.log('New session started for project:', project.id);
+          const newSession = { id: change.doc.id, ...change.doc.data() };
+          
+          // If this is the current user's session, update local state
+          if (newSession.userId === currentUser.id) {
+            setActiveSession(newSession);
+            const projectData = projects.find(p => p.id === project.id);
+            if (projectData && !selectedProject) {
+              setSelectedProject(projectData);
+              
+              // If it's a guest session, start countdown
+              if (newSession.sessionType === 'guest' && newSession.endTime) {
+                const endTime = newSession.endTime.toDate ? newSession.endTime.toDate() : new Date(newSession.endTime);
+                const remainingTime = Math.max(0, Math.floor((endTime - new Date()) / 1000));
+                
+                if (remainingTime > 0) {
+                  setCountdown(remainingTime);
+                  startCountdownTimer(newSession.id);
+                }
               }
             }
           }
-        });
-        
-        setProjectSessions(prev => ({
-          ...prev,
-          [project.id]: sessions
-        }));
-      });
-
-      const queueQuery = query(
-        collection(db, 'project_queues'),
-        where('projectId', '==', project.id),
-        orderBy('joinedAt', 'asc')
-      );
-      
-      queueUnsubscribes.current[project.id] = onSnapshot(queueQuery, (snapshot) => {
-        const queueItems = [];
-        snapshot.forEach(doc => {
-          queueItems.push({ id: doc.id, ...doc.data() });
-        });
-        
-        setQueues(prev => ({
-          ...prev,
-          [project.id]: queueItems
-        }));
-
-        const userInQueue = queueItems.find(item => item.userId === currentUser.id);
-        if (userInQueue) {
-          const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
-          const currentUserPriority = roleHierarchy[currentUser.role] || 5;
-          
-          const usersAhead = queueItems.filter(queueUser => {
-            const queueUserPriority = roleHierarchy[queueUser.userRole] || 5;
-            if (queueUserPriority < currentUserPriority) return true;
-            if (queueUserPriority === currentUserPriority) {
-              const queueUserTime = queueUser.joinedAt?.toDate ? queueUser.joinedAt.toDate() : new Date(queueUser.joinedAt);
-              const userTime = userInQueue.joinedAt?.toDate ? userInQueue.joinedAt.toDate() : new Date(userInQueue.joinedAt);
-              return queueUserTime < userTime;
-            }
-            return false;
-          }).length;
-          
-          // Update per-user, per-project queue info
-          setUserQueueInfo(prev => ({
-            ...prev,
-            [project.id]: {
-              position: usersAhead + 1,
-              estimated: (usersAhead + 1) * 60
-            }
-          }));
-        } else {
-          setUserQueueInfo(prev => ({
-            ...prev,
-            [project.id]: null
-          }));
         }
       });
+      
+      setProjectSessions(prev => ({
+        ...prev,
+        [project.id]: sessions
+      }));
     });
-  };
+
+    // Listen to queues with position updates
+    const queueQuery = query(
+      collection(db, 'project_queues'),
+      where('projectId', '==', project.id),
+      orderBy('joinedAt', 'asc')
+    );
+    
+    queueUnsubscribes.current[project.id] = onSnapshot(queueQuery, (snapshot) => {
+      const queueItems = [];
+      snapshot.forEach(doc => {
+        queueItems.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setQueues(prev => ({
+        ...prev,
+        [project.id]: queueItems
+      }));
+
+      // Update queue position if user is in queue
+      const userInQueue = queueItems.find(item => item.userId === currentUser.id);
+      if (userInQueue) {
+  const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
+  const currentUserPriority = roleHierarchy[currentUser.role] || 5;
+
+  const usersAhead = queueItems.filter(queueUser => {
+    const queueUserPriority = roleHierarchy[queueUser.userRole] || 5;
+    if (queueUserPriority < currentUserPriority) return true;
+    if (queueUserPriority === currentUserPriority) {
+      const queueUserTime = queueUser.joinedAt?.toDate ? queueUser.joinedAt.toDate() : new Date(queueUser.joinedAt);
+      const userTime = userInQueue.joinedAt?.toDate ? userInQueue.joinedAt.toDate() : new Date(userInQueue.joinedAt);
+      return queueUserTime < userTime;
+    }
+    return false;
+  }).length;
+
+  // Update per-user, per-project queue info
+  setUserQueueInfo(prev => ({
+    ...prev,
+    [project.id]: {
+      position: usersAhead + 1,
+      estimated: (usersAhead + 1) * 60
+    }
+  }));
+} else {
+  setUserQueueInfo(prev => ({
+    ...prev,
+    [project.id]: null
+  }));
+}
+
+    });
+  });
+};
 
   const cleanupListeners = () => {
     Object.values(sessionUnsubscribes.current).forEach(unsub => unsub());
@@ -466,7 +437,7 @@ useEffect(() => {
 
   const startGuestSession = async (projectId) => {
     try {
-      const endTime = new Date(Date.now() + 60000);
+      const endTime = new Date(Date.now() + 60000); // 60 seconds
       const sessionData = {
         projectId,
         userId: currentUser.id,
@@ -478,7 +449,13 @@ useEffect(() => {
         sessionType: 'guest'
       };
 
-      await addDoc(collection(db, 'project_sessions'), sessionData);
+      const docRef = await addDoc(collection(db, 'project_sessions'), sessionData);
+      setActiveSession({ id: docRef.id, ...sessionData });
+      setCountdown(60);
+      
+      // Start countdown
+      startCountdownTimer(docRef.id);
+
     } catch (error) {
       console.error('Error starting guest session:', error);
       setError('Failed to start session');
@@ -486,22 +463,23 @@ useEffect(() => {
   };
 
   const notifyCurrentUser = async (activeSession, waitingUserRole) => {
-    try {
-      const notificationData = {
-        targetUserId: activeSession.userId,
-        projectId: activeSession.projectId,
-        message: `A ${waitingUserRole} is waiting to access this project. Please complete your session when convenient.`,
-        priority: 'high',
-        type: 'priority_waiting',
-        createdAt: serverTimestamp(),
-        waitingUserRole: waitingUserRole
-      };
-      
-      await addDoc(collection(db, 'user_notifications'), notificationData);
-    } catch (error) {
-      console.error('Error sending notification:', error);
-    }
-  };
+  try {
+    const notificationData = {
+      targetUserId: activeSession.userId,
+      projectId: activeSession.projectId,
+      message: `A ${waitingUserRole} is waiting to access this project. Please complete your session when convenient.`,
+      priority: 'high',
+      type: 'priority_waiting',
+      createdAt: serverTimestamp(),
+      waitingUserRole: waitingUserRole
+    };
+    
+    await addDoc(collection(db, 'user_notifications'), notificationData);
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
+};
+
 
   const startRegularSession = async (projectId) => {
     try {
@@ -515,7 +493,8 @@ useEffect(() => {
         sessionType: 'regular'
       };
 
-      await addDoc(collection(db, 'project_sessions'), sessionData);
+      const docRef = await addDoc(collection(db, 'project_sessions'), sessionData);
+      setActiveSession({ id: docRef.id, ...sessionData });
     } catch (error) {
       console.error('Error starting regular session:', error);
       setError('Failed to start session');
@@ -523,24 +502,254 @@ useEffect(() => {
   };
 
   const endSession = async (sessionId) => {
-    try {
-      let sessionData = null;
-      let projectId = null;
+  try {
+    let sessionData = null;
+    let projectId = null;
 
-      if (sessionId) {
-        const sessionDoc = await getDocs(query(
-          collection(db, 'project_sessions'),
-          where('__name__', '==', sessionId)
-        ));
-        
-        if (!sessionDoc.empty) {
-          sessionData = sessionDoc.docs[0].data();
-          projectId = sessionData.projectId;
-        }
-        
-        await deleteDoc(doc(db, 'project_sessions', sessionId));
+    // First, get the session data before deleting it
+    if (sessionId) {
+      const sessionDoc = await getDocs(query(
+        collection(db, 'project_sessions'),
+        where('__name__', '==', sessionId)
+      ));
+      
+      if (!sessionDoc.empty) {
+        sessionData = sessionDoc.docs[0].data();
+        projectId = sessionData.projectId;
       }
       
+      // Delete the session
+      await deleteDoc(doc(db, 'project_sessions', sessionId));
+    }
+    
+    // Clear local state
+    setActiveSession(null);
+    setSelectedProject(null);
+    setCountdown(0);
+    
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+    }
+
+    // IMPORTANT: Process the queue for the project that was just freed
+    if (projectId) {
+      await processQueue(projectId);
+    }
+
+  } catch (error) {
+    console.error('Error ending session:', error);
+  }
+};
+
+const joinQueue = async (projectId) => {
+  try {
+    // First check if user is already in the queue
+    const existingQueueQuery = query(
+      collection(db, 'project_queues'),
+      where('projectId', '==', projectId),
+      where('userId', '==', currentUser.id)
+    );
+    
+    const existingQueueSnapshot = await getDocs(existingQueueQuery);
+    
+    if (!existingQueueSnapshot.empty) {
+      alert('You are already in the queue for this project.');
+      setShowQueueModal(false);
+      return;
+    }
+
+    const queueData = {
+      projectId,
+      userId: currentUser.id,
+      userEmail: currentUser.email,
+      userRole: currentUser.role,
+      joinedAt: serverTimestamp(),
+      status: 'waiting'
+    };
+
+    await addDoc(collection(db, 'project_queues'), queueData);
+    console.log('User joined queue:', currentUser.email, 'for project:', projectId);
+    setShowQueueModal(false);
+    
+    // Show confirmation message
+    alert(`You have been added to the queue. You will be notified when it's your turn.`);
+    
+  } catch (error) {
+    console.error('Error joining queue:', error);
+    setError('Failed to join queue');
+  }
+};
+
+  const processQueue = async (projectId) => {
+  try {
+    const queue = queues[projectId] || [];
+    if (queue.length === 0) {
+      console.log('No users in queue for project:', projectId);
+      return;
+    }
+
+    console.log('Processing queue for project:', projectId, 'Queue length:', queue.length);
+
+    // Sort by role hierarchy first, then by join time
+    const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
+    const sortedQueue = [...queue].sort((a, b) => {
+      const priorityA = roleHierarchy[a.userRole] || 5;
+      const priorityB = roleHierarchy[b.userRole] || 5;
+      
+      // First sort by role priority
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      
+      // If same role, sort by join time (earlier first)
+      const timeA = a.joinedAt?.toDate ? a.joinedAt.toDate() : new Date(a.joinedAt);
+      const timeB = b.joinedAt?.toDate ? b.joinedAt.toDate() : new Date(b.joinedAt);
+      return timeA - timeB;
+    });
+
+    const nextUser = sortedQueue[0];
+    console.log('Next user in queue:', nextUser);
+    
+    // Remove from queue first
+    await deleteDoc(doc(db, 'project_queues', nextUser.id));
+    console.log('Removed user from queue:', nextUser.id);
+    
+    // Start session for the next user
+    const sessionData = {
+      projectId: projectId,
+      userId: nextUser.userId,
+      userEmail: nextUser.userEmail,
+      userRole: nextUser.userRole,
+      status: 'active',
+      startTime: serverTimestamp(),
+      sessionType: nextUser.userRole === 'guest' ? 'guest' : 'regular'
+    };
+
+    // Add end time for guest sessions
+    if (nextUser.userRole === 'guest') {
+      sessionData.endTime = new Date(Date.now() + 60000); // 60 seconds
+    }
+
+    const docRef = await addDoc(collection(db, 'project_sessions'), sessionData);
+    console.log('Started new session:', docRef.id, 'for user:', nextUser.userEmail);
+    
+    // If it's the current user, update local state
+    if (nextUser.userId === currentUser.id) {
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        setSelectedProject(project);
+        setActiveSession({ id: docRef.id, ...sessionData });
+        
+        if (nextUser.userRole === 'guest') {
+          setCountdown(60);
+          startCountdownTimer(docRef.id);
+        }
+        
+        console.log('Updated local state for current user');
+      }
+    } else {
+      // Send notification to the user that their session has started
+      try {
+        const notificationData = {
+          targetUserId: nextUser.userId,
+          projectId: projectId,
+          message: `Your session has started! You now have access to the project.`,
+          priority: 'high',
+          type: 'session_started',
+          createdAt: serverTimestamp(),
+          sessionId: docRef.id
+        };
+        
+        await addDoc(collection(db, 'user_notifications'), notificationData);
+        console.log('Sent notification to user:', nextUser.userEmail);
+      } catch (error) {
+        console.error('Error sending session start notification:', error);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error processing queue:', error);
+  }
+};
+
+  const requestExtendedTime = async (additionalMinutes) => {
+    try {
+      const requestData = {
+        projectId: activeSession.projectId,
+        userId: currentUser.id,
+        userEmail: currentUser.email,
+        requestedTime: additionalMinutes,
+        currentSessionId: activeSession.id,
+        status: 'pending',
+        requestedAt: serverTimestamp()
+      };
+
+      await addDoc(collection(db, 'time_extension_requests'), requestData);
+      alert('Time extension request sent to administrators');
+    } catch (error) {
+      console.error('Error requesting time extension:', error);
+    }
+  };
+
+  const terminateSession = async (sessionId) => {
+  if (!['superadmin', 'admin'].includes(currentUser.role)) {
+    alert('You do not have permission to terminate sessions.');
+    return;
+  }
+
+  try {
+    // First, get the session data before deleting it
+    const sessionDoc = await getDoc(doc(db, 'project_sessions', sessionId));
+    
+    if (!sessionDoc.exists()) {
+      alert('Session not found.');
+      return;
+    }
+    
+    const sessionData = sessionDoc.data();
+    const terminatedUserId = sessionData.userId;
+    const terminatedUserEmail = sessionData.userEmail;
+    const projectId = sessionData.projectId;
+    
+    // Delete the session
+    await deleteDoc(doc(db, 'project_sessions', sessionId));
+    
+    // Send notification to the terminated user
+    const notificationData = {
+      targetUserId: terminatedUserId,
+      projectId: projectId,
+      message: `Your session has been terminated by ${currentUser.role}: ${currentUser.email}`,
+      priority: 'high',
+      type: 'session_terminated',
+      createdAt: serverTimestamp(),
+      terminatedBy: currentUser.id,
+      terminatedByRole: currentUser.role
+    };
+    
+    await addDoc(collection(db, 'user_notifications'), notificationData);
+    
+    alert(`Session terminated successfully for user: ${terminatedUserEmail}`);
+    
+    // Process the queue for the freed project
+    await processQueue(projectId);
+    
+  } catch (error) {
+    console.error('Error terminating session:', error);
+    alert('Failed to terminate session. Please try again.');
+  }
+};
+
+// Enhanced session monitoring - add this new useEffect
+useEffect(() => {
+  if (!currentUser || !activeSession) return;
+
+  // Monitor the current user's session for external termination
+  const sessionDoc = doc(db, 'project_sessions', activeSession.id);
+  
+  const unsubscribe = onSnapshot(sessionDoc, (doc) => {
+    if (!doc.exists()) {
+      // Session was deleted (terminated)
+      console.log('Current session was terminated externally');
+      
+      // Clear local state
       setActiveSession(null);
       setSelectedProject(null);
       setCountdown(0);
@@ -548,339 +757,117 @@ useEffect(() => {
       if (countdownInterval.current) {
         clearInterval(countdownInterval.current);
       }
-
-      if (projectId) {
-        await processQueue(projectId);
-      }
-    } catch (error) {
-      console.error('Error ending session:', error);
+      
+      // Show alert and redirect
+      alert('Your session has been terminated.');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     }
-  };
-
-  const joinQueue = async (projectId) => {
-    try {
-      const existingQueueQuery = query(
-        collection(db, 'project_queues'),
-        where('projectId', '==', projectId),
-        where('userId', '==', currentUser.id)
-      );
-      
-      const existingQueueSnapshot = await getDocs(existingQueueQuery);
-      
-      if (!existingQueueSnapshot.empty) {
-        alert('You are already in the queue for this project.');
-        setShowQueueModal(false);
-        return;
-      }
-
-      const queueData = {
-        projectId,
-        userId: currentUser.id,
-        userEmail: currentUser.email,
-        userRole: currentUser.role,
-        joinedAt: serverTimestamp(),
-        status: 'waiting'
-      };
-
-      await addDoc(collection(db, 'project_queues'), queueData);
-      setShowQueueModal(false);
-      alert(`You have been added to the queue. You will be notified when it's your turn.`);
-    } catch (error) {
-      console.error('Error joining queue:', error);
-      setError('Failed to join queue');
-    }
-  };
-
-  const processQueue = async (projectId) => {
-    try {
-      const queue = queues[projectId] || [];
-      if (queue.length === 0) return;
-
-      const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
-      const sortedQueue = [...queue].sort((a, b) => {
-        const priorityA = roleHierarchy[a.userRole] || 5;
-        const priorityB = roleHierarchy[b.userRole] || 5;
-        
-        if (priorityA !== priorityB) return priorityA - priorityB;
-        
-        const timeA = a.joinedAt?.toDate ? a.joinedAt.toDate() : new Date(a.joinedAt);
-        const timeB = b.joinedAt?.toDate ? b.joinedAt.toDate() : new Date(b.joinedAt);
-        return timeA - timeB;
-      });
-
-      const nextUser = sortedQueue[0];
-      await deleteDoc(doc(db, 'project_queues', nextUser.id));
-      
-      const sessionData = {
-        projectId: projectId,
-        userId: nextUser.userId,
-        userEmail: nextUser.userEmail,
-        userRole: nextUser.userRole,
-        status: 'active',
-        startTime: serverTimestamp(),
-        sessionType: nextUser.userRole === 'guest' ? 'guest' : 'regular'
-      };
-
-      if (nextUser.userRole === 'guest') {
-        sessionData.endTime = new Date(Date.now() + 60000);
-      }
-
-      const docRef = await addDoc(collection(db, 'project_sessions'), sessionData);
-      
-      if (nextUser.userId === currentUser.id) {
-        const project = projects.find(p => p.id === projectId);
-        if (project) {
-          setSelectedProject(project);
-          setActiveSession({ id: docRef.id, ...sessionData });
-        }
-      } else {
-        try {
-          const notificationData = {
-            targetUserId: nextUser.userId,
-            projectId: projectId,
-            message: `Your session has started! You now have access to the project.`,
-            priority: 'high',
-            type: 'session_started',
-            createdAt: serverTimestamp(),
-            sessionId: docRef.id
-          };
-          
-          await addDoc(collection(db, 'user_notifications'), notificationData);
-        } catch (error) {
-          console.error('Error sending session start notification:', error);
-        }
-      }
-    } catch (error) {
-      console.error('Error processing queue:', error);
-    }
-  };
-
-useEffect(() => {
-  if (!currentUser || !activeSession) return;
-
-  const extensionQuery = query(
-    collection(db, 'time_extension_requests'),
-    where('userId', '==', currentUser.id),
-    where('currentSessionId', '==', activeSession.id),
-    where('status', '==', 'approved')
-  );
-
-  const unsubscribe = onSnapshot(extensionQuery, async (snapshot) => {
-    snapshot.docChanges().forEach(async (change) => {
-      if (change.type === 'added' || change.type === 'modified') {
-        const approvedRequest = change.doc;
-        const requestData = approvedRequest.data();
-        
-        // Prevent processing the same request multiple times
-        if (processedRequests.has(approvedRequest.id)) {
-          return;
-        }
-        
-        // Only process if status is approved and not already processed
-        if (requestData.status === 'approved' && !requestData.processedAt) {
-          setProcessedRequests(prev => new Set([...prev, approvedRequest.id]));
-          
-          try {
-            // Get the current session document from Firestore to ensure we have the latest data
-            const sessionDoc = await getDoc(doc(db, 'project_sessions', activeSession.id));
-            
-            if (!sessionDoc.exists()) {
-              console.error('Session document not found');
-              return;
-            }
-            
-            const currentSessionData = sessionDoc.data();
-            
-            // Calculate new end time based on the current session's endTime
-            let currentEndTime;
-            if (currentSessionData.endTime?.toDate) {
-              currentEndTime = currentSessionData.endTime.toDate();
-            } else if (currentSessionData.endTime instanceof Date) {
-              currentEndTime = currentSessionData.endTime;
-            } else {
-              currentEndTime = new Date(currentSessionData.endTime);
-            }
-            
-            const newEndTime = new Date(currentEndTime.getTime() + (requestData.requestedTime * 60 * 1000));
-            
-            console.log('Extending session time:', {
-              sessionId: activeSession.id,
-              currentEndTime: currentEndTime,
-              newEndTime: newEndTime,
-              extensionMinutes: requestData.requestedTime
-            });
-            
-            // Update the session document in Firestore
-            await updateDoc(doc(db, 'project_sessions', activeSession.id), {
-              endTime: newEndTime,
-              lastUpdated: serverTimestamp()
-            });
-            
-            // Mark the request as processed
-            await updateDoc(doc(db, 'time_extension_requests', approvedRequest.id), {
-              status: 'processed',
-              processedAt: serverTimestamp()
-            });
-            
-            console.log('Session time extension processed successfully');
-            alert(`Your session has been extended by ${requestData.requestedTime} minutes!`);
-            
-          } catch (error) {
-            console.error('Error processing time extension:', error);
-            // Remove from processed set if there was an error
-            setProcessedRequests(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(approvedRequest.id);
-              return newSet;
-            });
-          }
-        }
-      }
-    });
+  }, (error) => {
+    console.error('Error monitoring session:', error);
   });
 
   return () => unsubscribe();
-}, [currentUser, activeSession, processedRequests]);
+}, [activeSession, currentUser]);
 
-// 3. Updated requestExtendedTime function with better error handling
-const requestExtendedTime = async (additionalMinutes) => {
-  if (!activeSession) return;
-
-  try {
-    // Check if there's already a pending request
-    const existingRequestQuery = query(
-      collection(db, 'time_extension_requests'),
-      where('userId', '==', currentUser.id),
-      where('currentSessionId', '==', activeSession.id),
-      where('status', 'in', ['pending', 'approved'])
-    );
-    
-    const existingSnapshot = await getDocs(existingRequestQuery);
-    
-    if (!existingSnapshot.empty) {
-      alert('You already have a pending time extension request.');
-      return;
-    }
-
-    await addDoc(collection(db, 'time_extension_requests'), {
-      userId: currentUser.id,
-      userEmail: currentUser.email,
-      projectId: selectedProject.id,
-      currentSessionId: activeSession.id,
-      requestedTime: additionalMinutes,
-      status: 'pending',
-      requestedAt: serverTimestamp()
-    });
-    
-    alert('Time extension request submitted!');
-  } catch (error) {
-    console.error('Error requesting time extension:', error);
-    alert('Failed to submit request');
+// Enhanced handleProjectAccess with better queue management
+const handleProjectAccess = async (project) => {
+  console.log('handleProjectAccess called for project:', project.id, 'by user:', currentUser.email);
+  
+  // Check if user is already in queue for this project and remove duplicates
+  const existingQueueQuery = query(
+    collection(db, 'project_queues'),
+    where('projectId', '==', project.id),
+    where('userId', '==', currentUser.id)
+  );
+  
+  const existingQueueSnapshot = await getDocs(existingQueueQuery);
+  
+  // Remove any existing queue entries for this user in this project
+  if (!existingQueueSnapshot.empty) {
+    const deletePromises = existingQueueSnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+    console.log('Removed duplicate queue entries for user');
   }
-};
-  const terminateSession = async (sessionId) => {
-    if (!['superadmin', 'admin'].includes(currentUser.role)) {
-      alert('You do not have permission to terminate sessions.');
-      return;
-    }
-
-    try {
-      const sessionDoc = await getDoc(doc(db, 'project_sessions', sessionId));
+  
+  // First check if current user already has an active session for this project
+  const userActiveSession = Object.values(projectSessions[project.id] || {})
+    .find(session => session.userId === currentUser.id && session.status === 'active');
+  
+  if (userActiveSession) {
+    console.log('User already has active session, continuing...');
+    // User already has an active session, continue with that session
+    setActiveSession(userActiveSession);
+    setSelectedProject(project);
+    
+    // If it's a guest session, restart countdown if there's time remaining
+    if (userActiveSession.sessionType === 'guest' && userActiveSession.endTime) {
+      const endTime = userActiveSession.endTime.toDate ? userActiveSession.endTime.toDate() : new Date(userActiveSession.endTime);
+      const remainingTime = Math.max(0, Math.floor((endTime - new Date()) / 1000));
       
-      if (!sessionDoc.exists()) {
-        alert('Session not found.');
+      if (remainingTime > 0) {
+        setCountdown(remainingTime);
+        startCountdownTimer(userActiveSession.id);
+      } else {
+        // Session has expired, clean it up
+        await endSession(userActiveSession.id);
         return;
       }
-      
-      const sessionData = sessionDoc.data();
-      const terminatedUserId = sessionData.userId;
-      const projectId = sessionData.projectId;
-      
-      await deleteDoc(doc(db, 'project_sessions', sessionId));
-      
-      const notificationData = {
-        targetUserId: terminatedUserId,
-        projectId: projectId,
-        message: `Your session has been terminated by ${currentUser.role}: ${currentUser.email}`,
-        priority: 'high',
-        type: 'session_terminated',
-        createdAt: serverTimestamp(),
-        terminatedBy: currentUser.id,
-        terminatedByRole: currentUser.role
-      };
-      
-      await addDoc(collection(db, 'user_notifications'), notificationData);
-      
-      alert(`Session terminated successfully for user: ${sessionData.userEmail}`);
-      
-      await processQueue(projectId);
-    } catch (error) {
-      console.error('Error terminating session:', error);
-      alert('Failed to terminate session. Please try again.');
     }
-  };
+    return;
+  }
 
-  const handleProjectAccess = async (project) => {
-    const existingQueueQuery = query(
-      collection(db, 'project_queues'),
-      where('projectId', '==', project.id),
-      where('userId', '==', currentUser.id)
-    );
-    
-    const existingQueueSnapshot = await getDocs(existingQueueQuery);
-    
-    if (!existingQueueSnapshot.empty) {
-      const deletePromises = existingQueueSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-    }
-    
-    const userActiveSession = Object.values(projectSessions[project.id] || {})
-      .find(session => session.userId === currentUser.id && session.status === 'active');
-    
-    if (userActiveSession) {
-      setActiveSession(userActiveSession);
-      setSelectedProject(project);
-      return;
-    }
-
-    const status = getProjectStatus(project.id);
-    
-    if (!status.isOccupied) {
-      if (currentUser.role === 'guest') {
-        await startGuestSession(project.id);
-      } else {
-        await startRegularSession(project.id);
-      }
-      setSelectedProject(project);
+  // Rest of the function remains the same...
+  const status = getProjectStatus(project.id);
+  
+  if (!status.isOccupied) {
+    console.log('Project is free, starting session...');
+    // Project is free - start session directly
+    if (currentUser.role === 'guest') {
+      await startGuestSession(project.id);
     } else {
-      const activeSession = status.activeSession;
-      const currentUserRole = currentUser.role;
-      const activeUserRole = activeSession.userRole;
-      
-      const roleHierarchy = {
-        'superadmin': 1,
-        'admin': 2,
-        'user': 3,
-        'guest': 4
-      };
-      
-      const currentUserPriority = roleHierarchy[currentUserRole] || 5;
-      const activeUserPriority = roleHierarchy[activeUserRole] || 5;
-      
-      if (currentUserRole === 'superadmin') {
-        alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
-        await notifyCurrentUser(activeSession, 'superadmin');
-        await joinQueue(project.id);
-      } else if (currentUserPriority < activeUserPriority) {
-        alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
-        await notifyCurrentUser(activeSession, currentUserRole);
-        await joinQueue(project.id);
-      } else {
-        setShowQueueModal(true);
-        setPendingProjectAccess(project.id);
-      }
+      await startRegularSession(project.id);
     }
-  };
+    setSelectedProject(project);
+  } else {
+    console.log('Project is occupied, checking hierarchy...');
+    // Project is occupied - implement hierarchy logic
+    const activeSession = status.activeSession;
+    const currentUserRole = currentUser.role;
+    const activeUserRole = activeSession.userRole;
+    
+    // Define role hierarchy (lower number = higher priority)
+    const roleHierarchy = {
+      'superadmin': 1,
+      'admin': 2,
+      'user': 3,
+      'guest': 4
+    };
+    
+    const currentUserPriority = roleHierarchy[currentUserRole] || 5;
+    const activeUserPriority = roleHierarchy[activeUserRole] || 5;
+    
+    if (currentUserRole === 'superadmin') {
+      console.log('Superadmin access requested - joining queue with priority');
+      alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
+      await notifyCurrentUser(activeSession, 'superadmin');
+      await joinQueue(project.id);
+    } else if (currentUserPriority < activeUserPriority) {
+      console.log('Higher priority user requesting access - joining queue');
+      alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
+      await notifyCurrentUser(activeSession, currentUserRole);
+      await joinQueue(project.id);
+    } else {
+      console.log('User must join queue');
+      setShowQueueModal(true);
+      setPendingProjectAccess(project.id);
+    }
+  }
+};
+
+
+
   const handleBackToList = () => {
     if (activeSession) {
       endSession(activeSession.id);
@@ -903,6 +890,7 @@ const requestExtendedTime = async (additionalMinutes) => {
     </div>
   );
 
+  // Queue Modal
   if (showQueueModal) {
     return (
       <div className="modal-overlay">
@@ -910,12 +898,14 @@ const requestExtendedTime = async (additionalMinutes) => {
           <h3>Dashboard is Busy</h3>
           <p>The project dashboard is currently being used by another user.</p>
           <p>Do you want to join the queue?</p>
-          {queuePosition && (
-            <div className="queue-info">
-              <p>Your position in queue: {queuePosition}</p>
-              <p>Estimated wait time: {queuePosition * 2} minutes</p>
-            </div>
-          )}
+          {/* {userQueueInfo[pendingProjectAccess] ? (
+  <div className="queue-info">
+    <p>Your position in queue: {userQueueInfo[pendingProjectAccess].position}</p>
+    <p>Estimated wait time: {userQueueInfo[pendingProjectAccess].estimated} seconds</p>
+  </div>
+) : (
+  <p>A high-priority user is using the dashboard. It may take longer than usual.</p>
+)} */}
           <div className="modal-actions">
             <button onClick={() => joinQueue(pendingProjectAccess)} className="btn-primary">
               Join Queue
@@ -929,6 +919,7 @@ const requestExtendedTime = async (additionalMinutes) => {
     );
   }
 
+  // Render detailed view if a project is selected
   if (selectedProject) {
     return (
       <div className="content-card">
@@ -939,9 +930,7 @@ const requestExtendedTime = async (additionalMinutes) => {
           
           {activeSession && currentUser.role === 'guest' && (
             <div className="session-timer">
-              <span className="timer-text">
-                Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-              </span>
+              <span className="timer-text">Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}</span>
               <button 
                 onClick={() => requestExtendedTime(5)} 
                 className="extend-time-btn"
@@ -988,6 +977,7 @@ const requestExtendedTime = async (additionalMinutes) => {
     );
   }
 
+  // Render projects list
   return (
     <div className="content-card">
       <h2>IoT Projects</h2>
@@ -1012,6 +1002,8 @@ const requestExtendedTime = async (additionalMinutes) => {
             const status = getProjectStatus(project.id);
             const userHasActiveSession = Object.values(projectSessions[project.id] || {})
               .some(session => session.userId === currentUser.id && session.status === 'active');
+            const info = userQueueInfo[project.id]; // <- 🟢 ADD THIS
+
             
             return (
               <div key={project.id} className="project-card">
@@ -1080,16 +1072,26 @@ const requestExtendedTime = async (additionalMinutes) => {
                     </ul>
                   </div>
                 )}
+                {info && currentUser.role === 'guest' && (
+  <div className="guest-queue-indicator">
+    <p style={{ fontSize: '14px', color: '#555' }}>
+      ⏳ You are <strong>#{info.position}</strong> in queue<br />
+      Est. Wait: <strong>{info.estimated} seconds</strong>
+    </p>
+  </div>
+)}
+
                 
                 <button 
-                  className="view-details-btn"
-                  onClick={() => handleProjectAccess(project)}
-                  disabled={
-                    userHasActiveSession && status.activeSession?.userId !== currentUser.id
-                  }
-                >
-                  {userHasActiveSession ? 'Continue Session' : (status.isOccupied ? 'Join/Wait' : 'View Details')}
-                </button>
+  className="view-details-btn"
+  onClick={() => handleProjectAccess(project)}
+  disabled={
+    // Only disable if user already has an active session for a different project
+    userHasActiveSession && status.activeSession?.userId !== currentUser.id
+  }
+>
+  {userHasActiveSession ? 'Continue Session' : (status.isOccupied ? 'Join/Wait' : 'View Details')}
+</button>
               </div>
             );
           })}
