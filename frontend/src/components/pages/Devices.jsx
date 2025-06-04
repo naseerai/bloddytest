@@ -24,13 +24,14 @@ const Devices = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [processedRequests, setProcessedRequests] = useState(new Set());
   
   // Project access control states
   const [projectSessions, setProjectSessions] = useState({});
   const [queues, setQueues] = useState({});
   const [activeSession, setActiveSession] = useState(null);
   const [countdown, setCountdown] = useState(0);
-  const [queuePosition, setQueuePosition] = useState(null);
+  const [userQueueInfo, setUserQueueInfo] = useState({});
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [pendingProjectAccess, setPendingProjectAccess] = useState(null);
   
@@ -350,25 +351,35 @@ const setupProjectListeners = () => {
       // Update queue position if user is in queue
       const userInQueue = queueItems.find(item => item.userId === currentUser.id);
       if (userInQueue) {
-        // Calculate position with role hierarchy
-        const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
-        const currentUserPriority = roleHierarchy[currentUser.role] || 5;
-        
-        const usersAhead = queueItems.filter(queueUser => {
-          const queueUserPriority = roleHierarchy[queueUser.userRole] || 5;
-          if (queueUserPriority < currentUserPriority) return true;
-          if (queueUserPriority === currentUserPriority) {
-            const queueUserTime = queueUser.joinedAt?.toDate ? queueUser.joinedAt.toDate() : new Date(queueUser.joinedAt);
-            const userTime = userInQueue.joinedAt?.toDate ? userInQueue.joinedAt.toDate() : new Date(userInQueue.joinedAt);
-            return queueUserTime < userTime;
-          }
-          return false;
-        }).length;
-        
-        setQueuePosition(usersAhead + 1);
-      } else {
-        setQueuePosition(null);
-      }
+  const roleHierarchy = { superadmin: 1, admin: 2, user: 3, guest: 4 };
+  const currentUserPriority = roleHierarchy[currentUser.role] || 5;
+
+  const usersAhead = queueItems.filter(queueUser => {
+    const queueUserPriority = roleHierarchy[queueUser.userRole] || 5;
+    if (queueUserPriority < currentUserPriority) return true;
+    if (queueUserPriority === currentUserPriority) {
+      const queueUserTime = queueUser.joinedAt?.toDate ? queueUser.joinedAt.toDate() : new Date(queueUser.joinedAt);
+      const userTime = userInQueue.joinedAt?.toDate ? userInQueue.joinedAt.toDate() : new Date(userInQueue.joinedAt);
+      return queueUserTime < userTime;
+    }
+    return false;
+  }).length;
+
+  // Update per-user, per-project queue info
+  setUserQueueInfo(prev => ({
+    ...prev,
+    [project.id]: {
+      position: usersAhead + 1,
+      estimated: (usersAhead + 1) * 60
+    }
+  }));
+} else {
+  setUserQueueInfo(prev => ({
+    ...prev,
+    [project.id]: null
+  }));
+}
+
     });
   });
 };
@@ -887,12 +898,14 @@ const handleProjectAccess = async (project) => {
           <h3>Dashboard is Busy</h3>
           <p>The project dashboard is currently being used by another user.</p>
           <p>Do you want to join the queue?</p>
-          {queuePosition && (
-            <div className="queue-info">
-              <p>Your position in queue: {queuePosition}</p>
-              <p>Estimated wait time: {queuePosition * 2} minutes</p>
-            </div>
-          )}
+          {/* {userQueueInfo[pendingProjectAccess] ? (
+  <div className="queue-info">
+    <p>Your position in queue: {userQueueInfo[pendingProjectAccess].position}</p>
+    <p>Estimated wait time: {userQueueInfo[pendingProjectAccess].estimated} seconds</p>
+  </div>
+) : (
+  <p>A high-priority user is using the dashboard. It may take longer than usual.</p>
+)} */}
           <div className="modal-actions">
             <button onClick={() => joinQueue(pendingProjectAccess)} className="btn-primary">
               Join Queue
@@ -989,6 +1002,8 @@ const handleProjectAccess = async (project) => {
             const status = getProjectStatus(project.id);
             const userHasActiveSession = Object.values(projectSessions[project.id] || {})
               .some(session => session.userId === currentUser.id && session.status === 'active');
+            const info = userQueueInfo[project.id]; // <- 🟢 ADD THIS
+
             
             return (
               <div key={project.id} className="project-card">
@@ -1057,6 +1072,15 @@ const handleProjectAccess = async (project) => {
                     </ul>
                   </div>
                 )}
+                {info && currentUser.role === 'guest' && (
+  <div className="guest-queue-indicator">
+    <p style={{ fontSize: '14px', color: '#555' }}>
+      ⏳ You are <strong>#{info.position}</strong> in queue<br />
+      Est. Wait: <strong>{info.estimated} seconds</strong>
+    </p>
+  </div>
+)}
+
                 
                 <button 
   className="view-details-btn"
