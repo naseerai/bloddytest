@@ -15,7 +15,8 @@ import {
   serverTimestamp,
   addDoc,
   getDocs,
-  getDoc 
+  getDoc,
+  limit
 } from 'firebase/firestore';
 import '../styles/Devices.css';
 
@@ -276,6 +277,49 @@ const leaveQueue = async (projectId) => {
   }
 };
 
+useEffect(() => {
+  if (!selectedProject || !currentUser) return;
+
+  const sessionQuery = query(
+    collection(db, 'project_sessions'),
+    where('userId', '==', currentUser.id),
+    where('projectId', '==', selectedProject.id),
+    where('status', '==', 'active'),
+    orderBy('startTime', 'desc'),
+    limit(1)
+  );
+
+  const unsubscribe = onSnapshot(sessionQuery, (snapshot) => {
+    if (!snapshot.empty) {
+      const sessionDoc = snapshot.docs[0];
+      const sessionData = sessionDoc.data();
+      
+      console.log('Session data updated from Firestore:', sessionData);
+      
+      const processedSessionData = {
+        id: sessionDoc.id,
+        ...sessionData,
+        startTime: sessionData.startTime?.toDate ? sessionData.startTime.toDate() : sessionData.startTime,
+        endTime: sessionData.endTime?.toDate ? sessionData.endTime.toDate() : sessionData.endTime
+      };
+      
+      // Force update the active session
+      setActiveSession(processedSessionData);
+      
+      console.log('Active session updated:', processedSessionData);
+    } else {
+      console.log('No active session found');
+      setActiveSession(null);
+    }
+  }, (error) => {
+    console.error('Error in session listener:', error);
+  });
+
+  return () => unsubscribe();
+}, [selectedProject, currentUser]);
+
+
+
 const setupProjectListeners = () => {
   projects.forEach(project => {
     // Listen to active sessions with change detection
@@ -434,6 +478,190 @@ const setupProjectListeners = () => {
   const canBypassQueue = (userRole) => {
     return ['superadmin', 'admin', 'user'].includes(userRole);
   };
+
+useEffect(() => {
+  if (!currentUser || !activeSession) return;
+
+  const extensionQuery = query(
+    collection(db, 'time_extension_requests'),
+    where('userId', '==', currentUser.id),
+    where('currentSessionId', '==', activeSession.id),
+    where('status', '==', 'approved')
+  );
+
+  const unsubscribe = onSnapshot(extensionQuery, async (snapshot) => {
+    snapshot.docChanges().forEach(async (change) => {
+      if (change.type === 'added' || change.type === 'modified') {
+        const approvedRequest = change.doc;
+        const requestData = approvedRequest.data();
+        
+        // Prevent processing the same request multiple times
+        if (processedRequests.has(approvedRequest.id)) {
+          return;
+        }
+        
+        // Only process if status is approved and not already processed
+        if (requestData.status === 'approved' && !requestData.processedAt) {
+          setProcessedRequests(prev => new Set([...prev, approvedRequest.id]));
+          
+          try {
+            // Get the current session document from Firestore to ensure we have the latest data
+            const sessionDoc = await getDoc(doc(db, 'project_sessions', activeSession.id));
+            
+            if (!sessionDoc.exists()) {
+              console.error('Session document not found');
+              return;
+            }
+            
+            const currentSessionData = sessionDoc.data();
+            
+            // Calculate new end time based on the current session's endTime
+            let currentEndTime;
+            if (currentSessionData.endTime?.toDate) {
+              currentEndTime = currentSessionData.endTime.toDate();
+            } else if (currentSessionData.endTime instanceof Date) {
+              currentEndTime = currentSessionData.endTime;
+            } else {
+              currentEndTime = new Date(currentSessionData.endTime);
+            }
+            
+            const newEndTime = new Date(currentEndTime.getTime() + (requestData.requestedTime * 60 * 1000));
+            
+            console.log('Extending session time:', {
+              sessionId: activeSession.id,
+              currentEndTime: currentEndTime,
+              newEndTime: newEndTime,
+              extensionMinutes: requestData.requestedTime
+            });
+            
+            // Update the session document in Firestore
+            await updateDoc(doc(db, 'project_sessions', activeSession.id), {
+              endTime: newEndTime,
+              lastUpdated: serverTimestamp()
+            });
+            
+            // Mark the request as processed
+            await updateDoc(doc(db, 'time_extension_requests', approvedRequest.id), {
+              status: 'processed',
+              processedAt: serverTimestamp()
+            });
+            
+            console.log('Session time extension processed successfully');
+            alert(`Your session has been extended by ${requestData.requestedTime} minutes!`);
+            
+          } catch (error) {
+            console.error('Error processing time extension:', error);
+            // Remove from processed set if there was an error
+            setProcessedRequests(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(approvedRequest.id);
+              return newSet;
+            });
+          }
+        }
+      }
+    });
+  });
+
+  return () => unsubscribe();
+}, [currentUser, activeSession, processedRequests]);
+
+useEffect(() => {
+  if (!activeSession?.id) return;
+
+  console.log('Setting up direct session listener for:', activeSession.id);
+
+  const sessionDocRef = doc(db, 'project_sessions', activeSession.id);
+  
+  const unsubscribe = onSnapshot(sessionDocRef, (docSnapshot) => {
+    if (docSnapshot.exists()) {
+      const sessionData = docSnapshot.data();
+      
+      console.log('Direct session update received:', sessionData);
+      
+      const updatedSession = {
+        id: docSnapshot.id,
+        ...sessionData,
+        startTime: sessionData.startTime?.toDate ? sessionData.startTime.toDate() : sessionData.startTime,
+        endTime: sessionData.endTime?.toDate ? sessionData.endTime.toDate() : sessionData.endTime
+      };
+      
+      // Update the active session state
+      setActiveSession(updatedSession);
+      
+      console.log('Session state updated with new data:', updatedSession);
+    } else {
+      console.log('Session document no longer exists');
+      setActiveSession(null);
+    }
+  }, (error) => {
+    console.error('Error in direct session listener:', error);
+  });
+
+  return () => {
+    console.log('Cleaning up direct session listener');
+    unsubscribe();
+  };
+}, [activeSession?.id]);
+
+useEffect(() => {
+  if (!activeSession || !activeSession.endTime) {
+    setCountdown(0);
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
+    }
+    return;
+  }
+
+  const updateCountdown = () => {
+    const now = new Date();
+    let endTime;
+    
+    // Handle different timestamp formats
+    if (activeSession.endTime?.toDate) {
+      endTime = activeSession.endTime.toDate();
+    } else if (activeSession.endTime instanceof Date) {
+      endTime = activeSession.endTime;
+    } else {
+      endTime = new Date(activeSession.endTime);
+    }
+    
+    const timeLeft = Math.max(0, Math.floor((endTime - now) / 1000));
+    
+    console.log('Countdown update:', {
+      endTime: endTime,
+      now: now,
+      timeLeft: timeLeft
+    });
+    
+    setCountdown(timeLeft);
+    
+    if (timeLeft <= 0 && activeSession.status === 'active') {
+      console.log('Session expired, ending session');
+      endSession(activeSession.id);
+    }
+  };
+
+  // Update immediately
+  updateCountdown();
+  
+  // Clear any existing interval
+  if (countdownInterval.current) {
+    clearInterval(countdownInterval.current);
+  }
+  
+  // Set new interval
+  const interval = setInterval(updateCountdown, 1000);
+  countdownInterval.current = interval;
+
+  return () => {
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
+    }
+  };
+}, [activeSession]); 
 
   const startGuestSession = async (projectId) => {
     try {
@@ -929,17 +1157,25 @@ const handleProjectAccess = async (project) => {
           </button>
           
           {activeSession && currentUser.role === 'guest' && (
-            <div className="session-timer">
-              <span className="timer-text">Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}</span>
-              <button 
-                onClick={() => requestExtendedTime(5)} 
-                className="extend-time-btn"
-                disabled={countdown < 10}
-              >
-                Request +5 min
-              </button>
-            </div>
-          )}
+  <div className="session-timer">
+    <span className="timer-text">
+      Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+    </span>
+    <button 
+      onClick={() => requestExtendedTime(5)} 
+      className="extend-time-btn"
+      disabled={countdown < 10}
+    >
+      Request +5 min
+    </button>
+    {/* Add this for debugging - remove in production */}
+    <div style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>
+      Session ID: {activeSession.id}<br/>
+      End Time: {activeSession.endTime ? new Date(activeSession.endTime).toLocaleTimeString() : 'None'}<br/>
+      Countdown: {countdown}s
+    </div>
+  </div>
+)}
         </div>
         
         <h2>{selectedProject.name}</h2>

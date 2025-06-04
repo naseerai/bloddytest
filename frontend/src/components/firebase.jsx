@@ -5,14 +5,14 @@ import { getAuth } from "firebase/auth";
 import { getDatabase } from "firebase/database"; // Add this import
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAgXHgw3bH2pbGCyMrJMQnRAsTrfHvy0zg",
-  authDomain: "myaccess-95907.firebaseapp.com",
-  databaseURL: "https://myaccess-95907-default-rtdb.firebaseio.com",
-  projectId: "myaccess-95907",
-  storageBucket: "myaccess-95907.firebasestorage.app",
-  messagingSenderId: "628681723345",
-  appId: "1:628681723345:web:2a9adcdc67525d827b64f0"
+  apiKey: "AIzaSyCxTSX9q9TC8DtpG0en7z3mbxNZWIrxi_k",
+  authDomain: "my-access-aae3e.firebaseapp.com",
+  projectId: "my-access-aae3e",
+  storageBucket: "my-access-aae3e.firebasestorage.app",
+  messagingSenderId: "721058490251",
+  appId: "1:721058490251:web:c9651f83f34fd5fbe2f18e"
 };
+
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app); // For Firestore (users collection)
