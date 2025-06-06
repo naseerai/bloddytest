@@ -1216,7 +1216,7 @@ const handleProjectAccess = async (project) => {
   // Render projects list
   return (
     <div className="content-card">
-      <h2>IoT Projects</h2>
+      {/* <h2>IoT Projects</h2> */}
       
       {filteredProjects.length === 0 ? (
         <div>
@@ -1277,16 +1277,16 @@ const handleProjectAccess = async (project) => {
                   )}
                 </div>
                 
-                <div className="project-access">
+                {/* <div className="project-access">
                   <span>Access: {Object.keys(project.access || {}).filter(k => project.access[k]).join(', ') || 'All users'}</span>
-                </div>
+                </div> */}
                 
-                {project.devices.length > 0 && (
+                {/* {project.devices.length > 0 && (
                   <div className="devices-section">
                     <h4>Devices ({project.devices.length})</h4>
                     <ul className="devices-list">
                       {project.devices.slice(0, 3).map(device => (
-                        <li key={device.id}>
+                        <li key={device.id}>  
                           <strong>{device.id}</strong>: {device.type || 'device'} - {device.status || 'no status'}
                         </li>
                       ))}
@@ -1307,7 +1307,7 @@ const handleProjectAccess = async (project) => {
                       {project.alerts.length > 2 && <li>+{project.alerts.length - 2} more alerts...</li>}
                     </ul>
                   </div>
-                )}
+                )} */}
                 {info && currentUser.role === 'guest' && (
   <div className="guest-queue-indicator">
     <p style={{ fontSize: '14px', color: '#555' }}>

@@ -4,6 +4,7 @@ import Sidebar from './pages/Sidebar';
 import UserManagement from './pages/UserManagement';
 import Devices from './pages/Devices';
 import { ActiveGuests, GuestQueues, SessionLogs, TimeRequests } from './pages/GuestManagement';
+import TourGuide from './TourGuide';
 import '../components/styles/Dashboard.css';
 
 const Dashboard = () => {
@@ -66,32 +67,33 @@ const Dashboard = () => {
         switch (currentUser.role) {
           case 'superadmin':
             return (
-              <div className="content-card">
+              <div className="content-card fade-in-up">
                 <h2>Superadmin Dashboard</h2>
-                <p>Welcome Superadmin! You have complete system control.</p>
+                <p>Welcome back! You have complete system control and oversight.</p>
+                
                 <div className="dashboard-stats">
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('users')}>
                     <div className="stat-icon">👥</div>
                     <div className="stat-info">
                       <h3>Total Users</h3>
                       <p>Manage all users in the system</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('admins')}>
                     <div className="stat-icon">⚙️</div>
                     <div className="stat-info">
                       <h3>Admin Management</h3>
                       <p>Control admin privileges</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('devices')}>
                     <div className="stat-icon">🎯</div>
                     <div className="stat-info">
                       <h3>Project Access Control</h3>
                       <p>Manage project sessions and queues</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('session-logs')}>
                     <div className="stat-icon">📊</div>
                     <div className="stat-info">
                       <h3>Session Analytics</h3>
@@ -118,25 +120,26 @@ const Dashboard = () => {
             );
           case 'admin':
             return (
-              <div className="content-card">
+              <div className="content-card fade-in-up">
                 <h2>Admin Dashboard</h2>
-                <p>Welcome Admin! You can manage users and guest sessions.</p>
+                <p>Welcome back! You can manage users and monitor guest sessions effectively.</p>
+                
                 <div className="dashboard-stats">
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('users')}>
                     <div className="stat-icon">👥</div>
                     <div className="stat-info">
                       <h3>User Management</h3>
                       <p>Manage system users</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('active-guests')}>
                     <div className="stat-icon">🎯</div>
                     <div className="stat-info">
                       <h3>Guest Session Control</h3>
                       <p>Monitor and manage guest access</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('guest-queues')}>
                     <div className="stat-icon">📋</div>
                     <div className="stat-info">
                       <h3>Queue Management</h3>
@@ -163,9 +166,10 @@ const Dashboard = () => {
             );
           case 'user':
             return (
-              <div className="content-card">
+              <div className="content-card fade-in-up">
                 <h2>User Dashboard</h2>
-                <p>Welcome User! Access your projects and monitor queues.</p>
+                <p>Welcome back! Access your assigned projects and monitor queue status.</p>
+                
                 <div className="dashboard-stats">
                   <div className="stat-card">
                     <div className="stat-icon">📊</div>
@@ -174,14 +178,14 @@ const Dashboard = () => {
                       <p>View and manage your profile</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('devices')}>
                     <div className="stat-icon">🔧</div>
                     <div className="stat-info">
                       <h3>IoT Projects</h3>
                       <p>Access your assigned projects</p>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => handleTabChange('guest-queues')}>
                     <div className="stat-icon">⏰</div>
                     <div className="stat-info">
                       <h3>Queue Status</h3>
@@ -205,10 +209,14 @@ const Dashboard = () => {
             );
           default: // guest
             return (
-              <div className="content-card">
+              <div className="content-card fade-in-up">
+                {/* Tour Guide for Guests */}
+                <TourGuide currentUser={currentUser} activeTab={activeTab} />
+                
                 <h2>Guest Dashboard</h2>
-                <p>Welcome Guest! You have limited access to IoT projects.</p>
-                <div className="dashboard-stats">
+                <p>Welcome to our IoT platform! You have limited access to explore our projects.</p>
+                
+                <div className="dashboard-stats" data-tour="stats">
                   <div className="stat-card">
                     <div className="stat-icon">🎯</div>
                     <div className="stat-info">
@@ -232,21 +240,22 @@ const Dashboard = () => {
                   </div>
                 </div>
                 
-                <div className="guest-info">
-                  <h3>Guest Access Rules</h3>
+                <div className="guest-info" data-tour="guest-info">
+                  <h3>🔍 Guest Access Rules</h3>
                   <ul>
-                    <li>Each project session is limited to 60 seconds</li>
-                    <li>You can request time extensions from administrators</li>
-                    <li>You may need to wait in queue if projects are busy</li>
-                    <li>Higher priority users may bypass your session</li>
+                    <li>Each project session is limited to 60 seconds for exploration</li>
+                    <li>You can request time extensions from administrators when needed</li>
+                    <li>You may need to wait in queue if projects are currently in use</li>
+                    <li>Registered users and admins may have priority access</li>
+                    <li>Make the most of your time - try different controls and sensors!</li>
                   </ul>
                 </div>
                 
-                <div className="quick-actions">
-                  <h3>Quick Actions</h3>
+                <div className="quick-actions" data-tour="quick-actions">
+                  <h3>🚀 Ready to Start?</h3>
                   <div className="action-buttons">
                     <button onClick={() => handleTabChange('devices')} className="action-btn">
-                      Browse Projects
+                      Browse IoT Projects
                     </button>
                   </div>
                 </div>
@@ -260,7 +269,7 @@ const Dashboard = () => {
     const titles = {
       'dashboard': 'Dashboard',
       'users': 'User Management',
-      'admins': 'Admin Management',
+      'admins': 'Admin Management', 
       'devices': 'IoT Projects',
       'active-guests': 'Active Guest Sessions',
       'guest-queues': 'Project Queues',
