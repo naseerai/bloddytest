@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Card } from "antd";
+import { InfoOutlined } from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../firebase'; // Firestore
@@ -35,11 +37,24 @@ const Devices = ({ currentUser }) => {
   const [userQueueInfo, setUserQueueInfo] = useState({});
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [pendingProjectAccess, setPendingProjectAccess] = useState(null);
-  
+  const [flippedCards, setFlippedCards] = useState(new Set());
   // Refs for cleanup
   const sessionUnsubscribes = useRef({});
   const queueUnsubscribes = useRef({});
   const countdownInterval = useRef(null);
+
+  const handleCardFlip = (projectId, e) => {
+  e.stopPropagation(); // Prevent triggering other click events
+  setFlippedCards(prev => {
+    const newSet = new Set(prev);
+    if (newSet.has(projectId)) {
+      newSet.delete(projectId);
+    } else {
+      newSet.add(projectId);
+    }
+    return newSet;
+  });
+};
 
   useEffect(() => {
     if (!currentUser) {
@@ -1094,8 +1109,6 @@ const handleProjectAccess = async (project) => {
   }
 };
 
-
-
   const handleBackToList = () => {
     if (activeSession) {
       endSession(activeSession.id);
@@ -1106,6 +1119,7 @@ const handleProjectAccess = async (project) => {
   if (loading) return (
     <div className="content-card">
       <h2>Loading IoT Projects...</h2>
+      
       <p>Please wait while we fetch your devices.</p>
     </div>
   );
@@ -1182,6 +1196,7 @@ const handleProjectAccess = async (project) => {
         <p className="project-description">{selectedProject.description}</p>
         
         <div className="project-details">
+          
           <h3>Devices ({selectedProject.devices.length})</h3>
           <div className="devices-grid">
             {selectedProject.devices.map(device => (
@@ -1215,126 +1230,231 @@ const handleProjectAccess = async (project) => {
 
   // Render projects list
   return (
-    <div className="content-card">
-      {/* <h2>IoT Projects</h2> */}
-      
-      {filteredProjects.length === 0 ? (
-        <div>
-          <p>No IoT projects found that match your access level.</p>
-          {projects.length > 0 && (
-            <p>Found {projects.length} total projects, but none match your access permissions.</p>
-          )}
-          <button onClick={() => {
-            setLoading(true);
-            setError(null);
-            window.location.reload();
-          }}>
-            Refresh Data
-          </button>
-        </div>
-      ) : (
-        <div className="projects-grid">
-          {filteredProjects.map(project => {
-            const status = getProjectStatus(project.id);
-            const userHasActiveSession = Object.values(projectSessions[project.id] || {})
-              .some(session => session.userId === currentUser.id && session.status === 'active');
-            const info = userQueueInfo[project.id]; // <- 🟢 ADD THIS
+  <div className="content-card">
+    {filteredProjects.length === 0 ? (
+      <div>
+        <p>No IoT projects found that match your access level.</p>
+        {projects.length > 0 && (
+          <p>Found {projects.length} total projects, but none match your access permissions.</p>
+        )}
+        <button onClick={() => {
+          setLoading(true);
+          setError(null);
+          window.location.reload();
+        }}>
+          Refresh Data
+        </button>
+      </div>
+    ) : (
+      <div className="projects-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+        {filteredProjects.map(project => {
+          const status = getProjectStatus(project.id);
+          const userHasActiveSession = Object.values(projectSessions[project.id] || {})
+            .some(session => session.userId === currentUser.id && session.status === 'active');
+          const info = userQueueInfo[project.id];
+          const isFlipped = flippedCards.has(project.id);
+          
+          // Default fallback image
+          const defaultImage = 'https://i.pinimg.com/736x/7f/5c/48/7f5c48b1112427bce292d0b06b4cafb5.jpg';
+          const projectImage = project.image || defaultImage;
+          
+          return (
+            <div key={project.id} style={{ perspective: '1000px', height: '300px' }}>
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  transformStyle: 'preserve-3d',
+                  transition: 'transform 0.6s',
+                  transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                }}
+              >
+                {/* Front Side */}
+                <Card
+                  hoverable
+                  style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '120%',
+                    backfaceVisibility: 'hidden',
+                    border: '1px solid #d9d9d9'
+                  }}
+                  cover={
+                    <div style={{ 
+                      height: '200px', 
+                      backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${projectImage})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontSize: '24px',
+                      fontWeight: 'bold',
+                      position: 'relative',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)'
+                    }}>
+                      {project.name}
+                      <InfoOutlined 
+                        style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '10px',
+                          fontSize: '15px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          padding: '5px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(255,255,255,0.2)',
+                          backdropFilter: 'blur(10px)'
+                        }}
+                        onClick={(e) => handleCardFlip(project.id, e)}
+                      />
+                    </div>
+                  }
 
-            
-            return (
-              <div key={project.id} className="project-card">
-                <h3>{project.name}</h3>
-                <p className="project-description">{project.description}</p>
-                
-                <div className="project-status">
-                  {status.isOccupied ? (
-                    <div className="status-occupied">
-                      <span className="status-indicator busy"></span>
-                      <span>In use by {status.activeSession.userEmail}</span>
-                      {userHasActiveSession && (
-                        <span className="user-session-indicator"> (Your Session)</span>
+                >
+                  <div style={{ padding: '0 8px' }}>
+                    <div className="project-status" style={{ marginBottom: '12px' }}>
+                      {status.isOccupied ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            backgroundColor: '#ff4d4f' 
+                          }}></span>
+                          <span style={{ fontSize: '12px' }}>In use by {status.activeSession.userEmail}</span>
+                          {userHasActiveSession && (
+                            <span style={{ fontSize: '10px', color: '#52c41a' }}> (Your Session)</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            backgroundColor: '#52c41a' 
+                          }}></span>
+                          <span style={{ fontSize: '12px' }}>Available</span>
+                        </div>
                       )}
-                      {['superadmin', 'admin'].includes(currentUser.role) && (
-                        <button 
-                          onClick={() => terminateSession(status.activeSession.id)}
-                          className="terminate-btn"
-                        >
-                          Terminate
-                        </button>
+                      
+                      {status.queueLength > 0 && (
+                        <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                          Queue: {status.queueLength} users
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="status-free">
-                      <span className="status-indicator free"></span>
-                      <span>Available</span>
-                    </div>
-                  )}
-                  
-                  {status.queueLength > 0 && (
-                    <div className="queue-status">
-                      <span>Queue: {status.queueLength} users</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* <div className="project-access">
-                  <span>Access: {Object.keys(project.access || {}).filter(k => project.access[k]).join(', ') || 'All users'}</span>
-                </div> */}
-                
-                {/* {project.devices.length > 0 && (
-                  <div className="devices-section">
-                    <h4>Devices ({project.devices.length})</h4>
-                    <ul className="devices-list">
-                      {project.devices.slice(0, 3).map(device => (
-                        <li key={device.id}>  
-                          <strong>{device.id}</strong>: {device.type || 'device'} - {device.status || 'no status'}
-                        </li>
-                      ))}
-                      {project.devices.length > 3 && <li>+{project.devices.length - 3} more...</li>}
-                    </ul>
-                  </div>
-                )}
-                
-                {project.alerts.length > 0 && (
-                  <div className="alerts-section">
-                    <h4>Alerts ({project.alerts.length})</h4>
-                    <ul className="alerts-list">
-                      {project.alerts.slice(0, 2).map((alert, index) => (
-                        <li key={index} className={`alert-${alert.priority || 'medium'}`}>
-                          {alert.message}
-                        </li>
-                      ))}
-                      {project.alerts.length > 2 && <li>+{project.alerts.length - 2} more alerts...</li>}
-                    </ul>
-                  </div>
-                )} */}
-                {info && currentUser.role === 'guest' && (
-  <div className="guest-queue-indicator">
-    <p style={{ fontSize: '14px', color: '#555' }}>
-      ⏳ You are <strong>#{info.position}</strong> in queue<br />
-      Est. Wait: <strong>{info.estimated} seconds</strong>
-    </p>
-  </div>
-)}
 
-                
-                <button 
-  className="view-details-btn"
-  onClick={() => handleProjectAccess(project)}
-  disabled={
-    // Only disable if user already has an active session for a different project
-    userHasActiveSession && status.activeSession?.userId !== currentUser.id
-  }
->
-  {userHasActiveSession ? 'Continue Session' : (status.isOccupied ? 'Join/Wait' : 'View Details')}
-</button>
+                    {info && currentUser.role === 'guest' && (
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#555', 
+                        backgroundColor: '#f0f0f0', 
+                        padding: '4px 8px', 
+                        borderRadius: '4px',
+                        textAlign: 'center'
+                      }}>
+                        ⏳ You are <strong>#{info.position}</strong> in queue<br />
+                        Est. Wait: <strong>{info.estimated} seconds</strong>
+                      </div>
+                    )}
+
+                    {['superadmin', 'admin'].includes(currentUser.role) && status.isOccupied && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          terminateSession(status.activeSession.id);
+                        }}
+                        style={{
+                          marginTop: '8px',
+                          background: '#ff4d4f',
+                          color: 'white',
+                          border: 'none',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Terminate
+                      </button>
+                    )}
+
+                    {/* Main Action Button */}
+                    <button 
+                      style={{
+                        marginTop: '12px',
+                        width: '100%',
+                        border: 'none',
+                        background: userHasActiveSession ? '#52c41a' : (status.isOccupied ? '#faad14' : '#1890ff'),
+                        color: 'white',
+                        padding: '10px 16px',
+                        borderRadius: '6px',
+                        cursor: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 'not-allowed' : 'pointer',
+                        opacity: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 0.6 : 1,
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}
+                      onClick={() => handleProjectAccess(project)}
+                      disabled={userHasActiveSession && status.activeSession?.userId !== currentUser.id}
+                    >
+                      {userHasActiveSession ? 'Continue Session' : (status.isOccupied ? 'Join/Wait' : 'View Details')}
+                    </button>
+                  </div>
+                </Card>
+
+                {/* Back Side */}
+                <Card
+                  style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '120%',
+                    backfaceVisibility: 'hidden',
+                    transform: 'rotateY(180deg)',
+                    border: '1px solid #d9d9d9'
+                  }}
+                >
+                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: '16px'
+                    }}>
+                      <h3 style={{ margin: 0, fontSize: '16px' }}>{project.name}</h3>
+                      <InfoOutlined 
+                        style={{
+                          fontSize: '15px',
+                          cursor: 'pointer',
+                          padding: '5px',
+                          borderRadius: '50%',
+                          backgroundColor: '#f0f0f0'
+                        }}
+                        onClick={(e) => handleCardFlip(project.id, e)}
+                      />
+                    </div>
+                    
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>Description:</h4>
+                      <p style={{ fontSize: '13px', lineHeight: '1.4', marginBottom: '16px' }}>
+                        {project.description}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+);
+      }
 
 export default Devices;
