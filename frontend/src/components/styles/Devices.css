@@ -135,7 +135,49 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
 }
+.control-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
+.status-indicator {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.viewing {
+  background-color: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+
+.status-indicator.controlling {
+  background-color: #f6ffed;
+  color: #52c41a;
+  border: 1px solid #b7eb8f;
+}
+
+.start-control-btn, .join-queue-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.start-control-btn {
+  background-color: #52c41a;
+  color: white;
+}
+
+.join-queue-btn {
+  background-color: #faad14;
+  color: white;
+}
 .status-occupied, .status-free {
   display: flex;
   align-items: center;
