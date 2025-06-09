@@ -1061,8 +1061,10 @@ const handleProjectAccess = async (project) => {
     return;
   }
 
-  // Rest of the function remains the same...
   const status = getProjectStatus(project.id);
+  
+  // ALWAYS allow users to view project details
+  setSelectedProject(project);
   
   if (!status.isOccupied) {
     console.log('Project is free, starting session...');
@@ -1072,10 +1074,9 @@ const handleProjectAccess = async (project) => {
     } else {
       await startRegularSession(project.id);
     }
-    setSelectedProject(project);
   } else {
-    console.log('Project is occupied, checking hierarchy...');
-    // Project is occupied - implement hierarchy logic
+    console.log('Project is occupied, user can view but needs to join queue for control...');
+    // Project is occupied - show notification about queue requirement
     const activeSession = status.activeSession;
     const currentUserRole = currentUser.role;
     const activeUserRole = activeSession.userRole;
@@ -1091,20 +1092,18 @@ const handleProjectAccess = async (project) => {
     const currentUserPriority = roleHierarchy[currentUserRole] || 5;
     const activeUserPriority = roleHierarchy[activeUserRole] || 5;
     
+    // Show different messages based on priority
     if (currentUserRole === 'superadmin') {
-      console.log('Superadmin access requested - joining queue with priority');
-      alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
+      alert(`You can view the project details. To control the project (currently used by ${activeUserRole}), you'll be added to the priority queue.`);
       await notifyCurrentUser(activeSession, 'superadmin');
       await joinQueue(project.id);
     } else if (currentUserPriority < activeUserPriority) {
-      console.log('Higher priority user requesting access - joining queue');
-      alert(`Project is currently in use by ${activeUserRole}. You will be added to the queue with priority access.`);
+      alert(`You can view the project details. To control the project (currently used by ${activeUserRole}), you'll be added to the priority queue.`);
       await notifyCurrentUser(activeSession, currentUserRole);
       await joinQueue(project.id);
     } else {
-      console.log('User must join queue');
-      setShowQueueModal(true);
-      setPendingProjectAccess(project.id);
+      // Don't show queue modal immediately, just inform user
+      alert(`You can view the project details. To control the project (currently used by ${activeUserRole}), you need to join the queue.`);
     }
   }
 };
@@ -1163,42 +1162,94 @@ const handleProjectAccess = async (project) => {
 
   // Render detailed view if a project is selected
   if (selectedProject) {
-    return (
-      <div className="content-card">
-        <div className="project-header">
-          <button onClick={handleBackToList} className="back-button">
-            &larr; Back to Projects
-          </button>
-          
-          {activeSession && currentUser.role === 'guest' && (
-  <div className="session-timer">
-    <span className="timer-text">
-      Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
-    </span>
-    <button 
-      onClick={() => requestExtendedTime(5)} 
-      className="extend-time-btn"
-      disabled={countdown < 10}
-    >
-      Request +5 min
+  return (
+    <div className="content-card">
+      <div className="project-header" style={{ 
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'space-between',
+  marginBottom: '16px'
+}}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <button onClick={handleBackToList} className="back-button">
+      &larr; Back to Projects
     </button>
-    {/* Add this for debugging - remove in production */}
-    <div style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>
-      Session ID: {activeSession.id}<br/>
-      End Time: {activeSession.endTime ? new Date(activeSession.endTime).toLocaleTimeString() : 'None'}<br/>
-      Countdown: {countdown}s
+    
+    {/* Control Status Badge */}
+    <div style={{ 
+      padding: '4px 10px', 
+      borderRadius: '4px',
+      backgroundColor: activeSession ? '#f6ffed' : '#fff2e8',
+      border: activeSession ? '1px solid #b7eb8f' : '1px solid #ffbb96',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }}>
+      <span style={{ 
+        width: '6px', 
+        height: '6px', 
+        borderRadius: '50%', 
+        backgroundColor: activeSession ? '#52c41a' : '#fa541c'
+      }}></span>
+      <span style={{ 
+        color: activeSession ? '#52c41a' : '#fa541c', 
+        fontWeight: '500',
+        fontSize: '12px'
+      }}>
+        {activeSession ? 'Control Access: Active' : 'View Only'}
+      </span>
+      {!activeSession && (
+        <button 
+          onClick={() => {
+            setShowQueueModal(true);
+            setPendingProjectAccess(selectedProject.id);
+          }}
+          style={{
+            background: '#1890ff',
+            color: 'white',
+            border: 'none',
+            padding: '2px 6px',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontSize: '10px',
+            fontWeight: '500',
+            marginLeft: '6px'
+          }}
+        >
+          Get Control
+        </button>
+      )}
     </div>
   </div>
-)}
-        </div>
-        
-        <h2>{selectedProject.name}</h2>
-        <p className="project-description">{selectedProject.description}</p>
-        
-        <div className="project-details">
-          
-          <h3>Devices ({selectedProject.devices.length})</h3>
-          <div className="devices-grid">
+  
+  {/* Keep your existing session timer on the right side */}
+  {activeSession && currentUser.role === 'guest' && (
+    <div className="session-timer">
+      <span className="timer-text">
+        Time remaining: {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+      </span>
+      <button 
+        onClick={() => requestExtendedTime(5)} 
+        className="extend-time-btn"
+        disabled={countdown < 10}
+      >
+        Request +5 min
+      </button>
+      {/* Debug info - remove in production */}
+      <div style={{fontSize: '10px', color: '#666', marginTop: '5px'}}>
+        Session ID: {activeSession.id}<br/>
+        End Time: {activeSession.endTime ? new Date(activeSession.endTime).toLocaleTimeString() : 'None'}<br/>
+        Countdown: {countdown}s
+      </div>
+    </div>
+  )}
+</div>
+      
+      <h2>{selectedProject.name}</h2>
+      <p className="project-description">{selectedProject.description}</p>
+      <div className="project-details">
+        <h3>Devices ({selectedProject.devices.length})</h3>
+        <div className="devices-grid">
             {selectedProject.devices.map(device => (
               <div key={device.id} className="device-card">
                 <h4>{device.id}</h4>
@@ -1208,8 +1259,7 @@ const handleProjectAccess = async (project) => {
               </div>
             ))}
           </div>
-          
-          {selectedProject.alerts.length > 0 && (
+           {selectedProject.alerts.length > 0 && (
             <>
               <h3>Alerts ({selectedProject.alerts.length})</h3>
               <div className="alerts-grid">
@@ -1223,10 +1273,10 @@ const handleProjectAccess = async (project) => {
               </div>
             </>
           )}
-        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // Render projects list
   return (
@@ -1403,7 +1453,7 @@ const handleProjectAccess = async (project) => {
                       onClick={() => handleProjectAccess(project)}
                       disabled={userHasActiveSession && status.activeSession?.userId !== currentUser.id}
                     >
-                      {userHasActiveSession ? 'Continue Session' : (status.isOccupied ? 'Join/Wait' : 'View Details')}
+                      {userHasActiveSession ? 'Continue Session' : 'View Project'}
                     </button>
                   </div>
                 </Card>
