@@ -14,26 +14,43 @@ const Login = () => {
   const navigate = useNavigate();
 
   const onFinish = async (values) => {
-    try {
-      setLoading(true);
-      const { email, password } = values;
-      
-      // Authenticate user
-      const user = await authenticateUser(email, password);
-      
-      // Store user data in localStorage or context
-      localStorage.setItem('currentUser', JSON.stringify(user));
-      
-      // Redirect to dashboard based on role
-      navigate('/dashboard?tab=dashboard');
-      
-      message.success(`Welcome back, ${user.role}!`);
-    } catch (error) {
+  try {
+    setLoading(true);
+    const { email, password } = values;
+    
+    // Authenticate user
+    const user = await authenticateUser(email, password);
+    
+    // Store user data in localStorage or context
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    
+    // Redirect to dashboard based on role
+    navigate('/dashboard?tab=dashboard');
+    
+    message.success(`Welcome back, ${user.role}!`);
+  } catch (error) {
+    // Set form field errors based on the error message
+    if (error.message.includes('User not found')) {
+      form.setFields([
+        {
+          name: 'email',
+          errors: ['User not found with this email'],
+        },
+      ]);
+    } else if (error.message.includes('Invalid password')) {
+      form.setFields([
+        {
+          name: 'password',
+          errors: ['Incorrect password'],
+        },
+      ]);
+    } else {
       message.error(error.message || 'Login failed. Please try again.');
-    } finally {
-      setLoading(false);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const onFinishFailed = (errorInfo) => {
     console.log('Failed:', errorInfo);
