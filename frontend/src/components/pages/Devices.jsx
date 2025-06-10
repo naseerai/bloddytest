@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card } from "antd";
-import { InfoOutlined } from "@ant-design/icons";
+import { InfoOutlined,EditOutlined, DeleteOutlined} from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue,remove,set } from 'firebase/database';
 import { db } from '../firebase'; // Firestore
 import { 
   collection, 
@@ -40,6 +40,8 @@ const Devices = ({ currentUser }) => {
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [pendingProjectAccess, setPendingProjectAccess] = useState(null);
   const [flippedCards, setFlippedCards] = useState(new Set());
+  const [showEditModal, setShowEditModal] = useState(false);
+const [editingProject, setEditingProject] = useState(null);
   // Refs for cleanup
   const sessionUnsubscribes = useRef({});
   const queueUnsubscribes = useRef({});
@@ -1280,6 +1282,26 @@ const handleProjectAccess = async (project) => {
     </div>
   );
 }
+const handleEditProject = (project, e) => {
+  e.stopPropagation();
+  setEditingProject(project);
+  setShowEditModal(true);
+};
+
+const handleDeleteProject = async (project, e) => {
+  e.stopPropagation();
+  if (window.confirm(`Are you sure you want to delete "${project.name}"?`)) {
+    try {
+      // Delete from Realtime Database
+      await remove(ref(realtimeDb, `projects/${project.id}`));
+      alert('Project deleted successfully');
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      alert('Failed to delete project');
+    }
+  }
+};
+
 
   // Render projects list
   return (
@@ -1355,21 +1377,54 @@ const handleProjectAccess = async (project) => {
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)'
                     }}>
                       {project.name}
-                      <InfoOutlined 
-                        style={{
-                          position: 'absolute',
-                          top: '10px',
-                          right: '10px',
-                          fontSize: '15px',
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: '5px',
-                          borderRadius: '50%',
-                          backgroundColor: 'rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(10px)'
-                        }}
-                        onClick={(e) => handleCardFlip(project.id, e)}
-                      />
+                     <div style={{
+  position: 'absolute',
+  top: '10px',
+  right: '10px',
+  display: 'flex',
+  gap: '8px'
+}}>
+  {['superadmin', 'admin'].includes(currentUser.role) && (
+    <>
+      <EditOutlined 
+        style={{
+          fontSize: '15px',
+          color: 'white',
+          cursor: 'pointer',
+          padding: '5px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          backdropFilter: 'blur(10px)'
+        }}
+        onClick={(e) => handleEditProject(project, e)}
+      />
+      <DeleteOutlined 
+        style={{
+          fontSize: '15px',
+          color: 'white',
+          cursor: 'pointer',
+          padding: '5px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          backdropFilter: 'blur(10px)'
+        }}
+        onClick={(e) => handleDeleteProject(project, e)}
+      />
+    </>
+  )}
+  <InfoOutlined 
+    style={{
+      fontSize: '15px',
+      color: 'white',
+      cursor: 'pointer',
+      padding: '5px',
+      borderRadius: '50%',
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      backdropFilter: 'blur(10px)'
+    }}
+    onClick={(e) => handleCardFlip(project.id, e)}
+  />
+</div>
                     </div>
                   }
 
@@ -1511,6 +1566,79 @@ const handleProjectAccess = async (project) => {
         })}
       </div>
     )}
+    {/* Edit Modal */}
+{showEditModal && editingProject && (
+  <div className="modal-overlay">
+    <div className="modal-content" style={{ maxWidth: '500px' }}>
+      <h3>Edit Project</h3>
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        try {
+          await set(ref(realtimeDb, `projects/${editingProject.id}`), {
+  name: formData.get('name'),
+  description: formData.get('description'),
+  image: formData.get('image'),
+  // Preserve other existing data
+  access: editingProject.access,
+  devices: editingProject.devices || {},
+  alerts: editingProject.alerts || {}
+});
+          setShowEditModal(false);
+          setEditingProject(null);
+          alert('Project updated successfully');
+        } catch (error) {
+          console.error('Error updating project:', error);
+          alert('Failed to update project');
+        }
+      }}>
+        <div style={{ marginBottom: '16px' }}>
+          <label>Project Name:</label>
+          <input 
+            type="text" 
+            name="name" 
+            defaultValue={editingProject.name}
+            required
+            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+          />
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <label>Description:</label>
+          <textarea 
+            name="description" 
+            defaultValue={editingProject.description}
+            rows="3"
+            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+          />
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <label>Image URL:</label>
+          <input 
+            type="url" 
+            name="image" 
+            defaultValue={editingProject.image}
+            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+          />
+        </div>
+        <div className="modal-actions">
+          <button type="submit" className="btn-primary">
+            Save Changes
+          </button>
+          <button 
+            type="button" 
+            onClick={() => {
+              setShowEditModal(false);
+              setEditingProject(null);
+            }} 
+            className="btn-secondary"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
   </div>
 );
       }
