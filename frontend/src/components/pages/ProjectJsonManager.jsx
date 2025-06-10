@@ -72,7 +72,7 @@ const ProjectFormManager = ({ currentUser }) => {
   return (
     <>
       <div style={{ textAlign: 'right', marginBottom: 16 }}>
-        <Button type="primary" onClick={showModal}>➕ Add New Project</Button>
+        <Button type="primary" onClick={showModal}>Add New Project</Button>
       </div>
 
       <Modal
