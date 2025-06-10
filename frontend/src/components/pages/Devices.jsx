@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card } from "antd";
-import { InfoOutlined } from "@ant-design/icons";
+import { Card,Row,Col, Space, Tag, Progress, Typography } from "antd";
+import { InfoOutlined,DashboardOutlined, CarOutlined,EnvironmentOutlined, ToolOutlined } from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../firebase'; // Firestore
@@ -21,7 +21,10 @@ import {
   limit
 } from 'firebase/firestore';
 import '../styles/Devices.css';
-
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+// const { Text } = Typography;
 const Devices = ({ currentUser }) => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +58,12 @@ const Devices = ({ currentUser }) => {
     return newSet;
   });
 };
-
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
   useEffect(() => {
     if (!currentUser) {
       setError('User not authenticated');
@@ -454,17 +462,43 @@ const setupProjectListeners = () => {
     }
   };
 
-  const getDevicesFromProject = (project) => {
-    try {
-      if (project.devices) return Object.entries(project.devices).map(([id, device]) => ({ id, ...device }));
-      if (project.vehicles) return Object.entries(project.vehicles).map(([id, vehicle]) => ({ id, type: 'vehicle', ...vehicle }));
-      if (project.sensors) return Object.entries(project.sensors).map(([id, sensor]) => ({ id, type: 'sensor', ...sensor }));
-      return [];
-    } catch (error) {
-      console.error("Error extracting devices:", error);
-      return [];
+const getDevicesFromProject = (project) => {
+  try {
+    let devices = [];
+    
+    // Handle vehicles (for fleet_tracking)
+    if (project.vehicles) {
+      devices = [...devices, ...Object.entries(project.vehicles).map(([id, vehicle]) => ({ 
+        id, 
+        type: 'vehicle', 
+        ...vehicle 
+      }))];
     }
-  };
+    
+    // Handle sensors (for industrial_monitoring)
+    if (project.sensors) {
+      devices = [...devices, ...Object.entries(project.sensors).map(([id, sensor]) => ({ 
+        id, 
+        type: 'sensor', 
+        ...sensor 
+      }))];
+    }
+    
+    // Handle devices (for smart_home)
+    if (project.devices) {
+      devices = [...devices, ...Object.entries(project.devices).map(([id, device]) => ({ 
+        id, 
+        type: 'device', 
+        ...device 
+      }))];
+    }
+    
+    return devices;
+  } catch (error) {
+    console.error("Error extracting devices:", error);
+    return [];
+  }
+};
 
   const filteredProjects = projects.filter(project => {
     try {
@@ -1248,31 +1282,131 @@ const handleProjectAccess = async (project) => {
       <h2>{selectedProject.name}</h2>
       <p className="project-description">{selectedProject.description}</p>
       <div className="project-details">
-        <h3>Devices ({selectedProject.devices.length})</h3>
-        <div className="devices-grid">
-            {selectedProject.devices.map(device => (
-              <div key={device.id} className="device-card">
-                <h4>{device.id}</h4>
-                <p>Type: {device.type || 'device'}</p>
-                <p>Status: {device.status || 'no status'}</p>
-                {device.lastSeen && <p>Last seen: {device.lastSeen}</p>}
+        {selectedProject.id === 'fleet_tracking' && (
+    <>
+      <h3>Vehicle Locations</h3>
+      <div style={{ height: '400px', marginBottom: '20px', border: '1px solid #d9d9d9', borderRadius: '8px' }}>
+        <MapContainer 
+  center={[12.9716, 77.5946]} 
+  zoom={10} 
+  style={{ height: '100%', width: '100%' }}
+>
+  <TileLayer
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  />
+  {selectedProject.devices.map(vehicle => (
+    vehicle.location && (
+      <Marker key={vehicle.id} position={[vehicle.location.lat, vehicle.location.lng]}>
+        <Popup>
+          <div style={{ minWidth: '200px' }}>
+            <Typography.Title level={5} style={{ margin: '0 0 12px 0' }}>{vehicle.id}</Typography.Title>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <DashboardOutlined style={{ color: '#1890ff' }} />
+                <Typography.Text strong>Speed:</Typography.Text>
+                <Tag color="blue">{vehicle.speed}</Tag>
               </div>
-            ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CarOutlined style={{ color: '#52c41a' }} />
+                <Typography.Text strong>Fuel:</Typography.Text>
+                <Progress 
+                  percent={parseInt(vehicle.fuel)} 
+                  size="small" 
+                  style={{ flex: 1, margin: 0 }}
+                  strokeColor={parseInt(vehicle.fuel) > 30 ? '#52c41a' : '#ff4d4f'}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ToolOutlined style={{ color: vehicle.maintenance_due ? '#ff4d4f' : '#52c41a' }} />
+                <Typography.Text strong>Maintenance:</Typography.Text>
+                <Tag color={vehicle.maintenance_due ? 'red' : 'green'}>
+                  {vehicle.maintenance_due ? 'Due' : 'OK'}
+                </Tag>
+              </div>
+            </Space>
           </div>
-           {selectedProject.alerts.length > 0 && (
-            <>
-              <h3>Alerts ({selectedProject.alerts.length})</h3>
-              <div className="alerts-grid">
-                {selectedProject.alerts.map((alert, index) => (
-                  <div key={index} className={`alert-card alert-${alert.priority || 'medium'}`}>
-                    <h4>{alert.title || 'Alert'}</h4>
-                    <p>{alert.message}</p>
-                    {alert.timestamp && <p>Time: {alert.timestamp}</p>}
-                  </div>
-                ))}
+        </Popup>
+      </Marker>
+    )
+  ))}
+</MapContainer>
+      </div>
+      
+      <h3>Vehicle Details</h3>
+      <div className="devices-grid">
+  <Row gutter={[16, 16]}>
+    {selectedProject.devices.map(vehicle => (
+      <Col xs={24} sm={12} md={8} lg={16} key={vehicle.id}>
+        <Card 
+          hoverable
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CarOutlined style={{ color: '#1890ff' }} />
+              <Typography.Text strong>{vehicle.id}</Typography.Text>
+            </div>
+          }
+          style={{ height: '100%' }}
+        >
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {/* Speed */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <DashboardOutlined style={{ color: '#1890ff' }} />
+                <Typography.Text>Speed:</Typography.Text>
               </div>
-            </>
-          )}
+              <Tag color="blue" style={{ margin: 0 }}>
+                {vehicle.speed}
+              </Tag>
+            </div>
+
+            {/* Fuel */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <CarOutlined style={{ color: '#52c41a' }} />
+                <Typography.Text>Fuel:</Typography.Text>
+              </div>
+              <Progress 
+                percent={parseInt(vehicle.fuel)} 
+                size="small"
+                strokeColor={parseInt(vehicle.fuel) > 30 ? '#52c41a' : '#ff4d4f'}
+                showInfo={true}
+                format={() => `${vehicle.fuel}`}
+              />
+            </div>
+
+            {/* Maintenance */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ToolOutlined style={{ color: vehicle.maintenance_due ? '#ff4d4f' : '#52c41a' }} />
+                <Typography.Text>Maintenance:</Typography.Text>
+              </div>
+              <Tag color={vehicle.maintenance_due ? 'red' : 'green'} style={{ margin: 0 }}>
+                {vehicle.maintenance_due ? 'Due' : 'OK'}
+              </Tag>
+            </div>
+
+            {/* Location */}
+            {vehicle.location && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <EnvironmentOutlined style={{ color: '#722ed1' }} />
+                  <Typography.Text>Location:</Typography.Text>
+                </div>
+                <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                  {vehicle.location.lat.toFixed(4)}, {vehicle.location.lng.toFixed(4)}
+                </Typography.Text>
+              </div>
+            )}
+          </Space>
+        </Card>
+      </Col>
+    ))}
+  </Row>
+</div>
+    </>
+  )}
+
       </div>
     </div>
   );
