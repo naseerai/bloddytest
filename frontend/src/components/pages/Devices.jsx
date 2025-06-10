@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card,Row,Col, Space, Tag, Progress, Typography } from "antd";
-import { InfoOutlined,DashboardOutlined, CarOutlined,EnvironmentOutlined, ToolOutlined } from "@ant-design/icons";
+import { Card,Row,Col, Space,Badge,Divider, Tag, Progress, Typography } from "antd";
+import { InfoOutlined,DashboardOutlined, CarOutlined,EnvironmentOutlined, ToolOutlined,CheckCircleOutlined,WarningOutlined,ExclamationCircleOutlined,FireOutlined,HomeOutlined,BulbOutlined,CameraOutlined,ThunderboltOutlined,StopOutlined,ClockCircleOutlined } from "@ant-design/icons";
 import {EditOutlined, DeleteOutlined} from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
 import { ref, onValue,remove,set } from 'firebase/database';
@@ -25,8 +25,10 @@ import '../styles/Devices.css';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+const { Title, Text } = Typography;
 // const { Text } = Typography;
 import ProjectJsonManager from '../pages/ProjectJsonManager';
+import SmartHomeDevices from './SmartHomeDevices';
 
 
 const Devices = ({ currentUser }) => {
@@ -1413,6 +1415,131 @@ const handleProjectAccess = async (project) => {
 </div>
     </>
   )}
+
+
+  {/* Industrial Monitoring - Show Sensors */}
+  {/* Industrial Monitoring - Show Sensors */}
+{selectedProject.id === 'industrial_monitoring' && (
+  <div style={{ padding: '16px' }}>
+
+
+    <Title level={4} style={{ marginBottom: '16px' }}>
+      <DashboardOutlined style={{ marginRight: '8px' }} />
+      Sensors ({(selectedProject.devices || []).length})
+    </Title>
+    
+    <Row gutter={[16, 16]}>
+      {(selectedProject.devices || []).map((sensor) => {
+        // Status configuration
+        const getStatusConfig = (status) => {
+          switch (status) {
+            case 'normal':
+              return { color: 'success', icon: <CheckCircleOutlined />, text: 'Normal' };
+            case 'warning':
+              return { color: 'warning', icon: <WarningOutlined />, text: 'Warning' };
+            case 'critical':
+              return { color: 'error', icon: <ExclamationCircleOutlined />, text: 'Critical' };
+            default:
+              return { color: 'default', icon: <CheckCircleOutlined />, text: 'Unknown' };
+          }
+        };
+
+        // Type icon configuration
+        const getTypeIcon = (type) => {
+          switch (type.toLowerCase()) {
+            case 'temperature':
+              return <FireOutlined style={{ color: '#ff4d4f' }} />;
+            case 'pressure':
+              return <DashboardOutlined style={{ color: '#1890ff' }} />;
+            default:
+              return <DashboardOutlined />;
+          }
+        };
+
+        const statusConfig = getStatusConfig(sensor.status);
+
+        return (
+          <Col xs={24} sm={12} md={8} lg={6} key={sensor.id}>
+            <Card
+              size="small"
+              hoverable
+              style={{
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              }}
+              bodyStyle={{ padding: '16px' }}
+            >
+              <Space direction="vertical" style={{ width: '100%' }} size="small">
+                {/* Sensor ID Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text strong style={{ fontSize: '16px' }}>
+                    {sensor.id.toUpperCase()}
+                  </Text>
+                  <Badge 
+                    status={statusConfig.color} 
+                    text={statusConfig.text}
+                  />
+                </div>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                {/* Sensor Details */}
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Type:</Text>
+                    <Tag icon={getTypeIcon(sensor.type)} color="blue">
+                      {sensor.type.charAt(0).toUpperCase() + sensor.type.slice(1)}
+                    </Tag>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Value:</Text>
+                    <Text strong style={{ 
+                      fontSize: '18px', 
+                      color: sensor.status === 'warning' ? '#faad14' : 
+                             sensor.status === 'critical' ? '#ff4d4f' : '#52c41a' 
+                    }}>
+                      {sensor.value}
+                    </Text>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Status:</Text>
+                    <Tag 
+                      icon={statusConfig.icon} 
+                      color={statusConfig.color}
+                    >
+                      {statusConfig.text}
+                    </Tag>
+                  </div>
+                </Space>
+              </Space>
+            </Card>
+          </Col>
+        );
+      })}
+    </Row>
+    
+    {/* Empty State */}
+    {(selectedProject.devices || []).length === 0 && (
+      <Card style={{ textAlign: 'center', padding: '40px' }}>
+        <DashboardOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />
+        <Title level={4} type="secondary" style={{ marginTop: '16px' }}>
+          No sensors found
+        </Title>
+        <Text type="secondary">
+          No sensors are currently configured for this project.
+        </Text>
+      </Card>
+    )}
+  </div>
+)}
+
+
+{/* Smart Home - Show Devices */}
+{selectedProject.id === 'smart_home' && (
+  <SmartHomeDevices selectedProject={selectedProject} />
+)}
 
       </div>
     </div>
