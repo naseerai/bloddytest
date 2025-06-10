@@ -21,6 +21,8 @@ import {
   limit
 } from 'firebase/firestore';
 import '../styles/Devices.css';
+import ProjectJsonManager from '../pages/ProjectJsonManager';
+
 
 const Devices = ({ currentUser }) => {
   const [projects, setProjects] = useState([]);
@@ -74,6 +76,7 @@ const Devices = ({ currentUser }) => {
             name: project.name || 'Unnamed Project',
             description: project.description || 'No description',
             access: project.access || {},
+            image: project.image && project.image.trim() !== '' ? project.image : null,
             devices: getDevicesFromProject(project),
             alerts: project.alerts ? Object.values(project.alerts) : []
           }));
@@ -1281,6 +1284,10 @@ const handleProjectAccess = async (project) => {
   // Render projects list
   return (
   <div className="content-card">
+    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+  <ProjectJsonManager currentUser={currentUser} />
+</div>
+
     {filteredProjects.length === 0 ? (
       <div>
         <p>No IoT projects found that match your access level.</p>
@@ -1306,7 +1313,8 @@ const handleProjectAccess = async (project) => {
           
           // Default fallback image
           const defaultImage = 'https://i.pinimg.com/736x/7f/5c/48/7f5c48b1112427bce292d0b06b4cafb5.jpg';
-          const projectImage = project.image || defaultImage;
+          const projectImage = project.image && project.image.trim() !== '' ? project.image : defaultImage;
+
           
           return (
             <div key={project.id} style={{ perspective: '1000px', height: '300px' }}>
