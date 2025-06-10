@@ -470,6 +470,7 @@
 }
 
 .devices-grid {
+  width: 50%;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
@@ -638,9 +639,7 @@
     min-width: auto;
   }
   
-  .devices-grid {
-    grid-template-columns: 1fr;
-  }
+  
   
   .modal-content {
     margin: 20px;

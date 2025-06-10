@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card,message } from "antd";
+import { message } from "antd";
 import { InfoOutlined,EditOutlined, DeleteOutlined} from "@ant-design/icons";
+import { Card,Row,Col, Space,Badge,Divider, Tag, Progress, Typography } from "antd";
+import { DashboardOutlined, CarOutlined,EnvironmentOutlined, ToolOutlined,CheckCircleOutlined,WarningOutlined,ExclamationCircleOutlined,FireOutlined,HomeOutlined,BulbOutlined,CameraOutlined,ThunderboltOutlined,StopOutlined,ClockCircleOutlined } from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
 import { ref, onValue,remove,set } from 'firebase/database';
 import { db } from '../firebase'; // Firestore
@@ -21,7 +23,13 @@ import {
   limit
 } from 'firebase/firestore';
 import '../styles/Devices.css';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+const { Title, Text } = Typography;
+// const { Text } = Typography;
 import ProjectJsonManager from '../pages/ProjectJsonManager';
+import SmartHomeDevices from './SmartHomeDevices';
 
 
 const Devices = ({ currentUser }) => {
@@ -59,7 +67,12 @@ const [editingProject, setEditingProject] = useState(null);
     return newSet;
   });
 };
-
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
   useEffect(() => {
     if (!currentUser) {
       setError('User not authenticated');
@@ -459,17 +472,43 @@ const setupProjectListeners = () => {
     }
   };
 
-  const getDevicesFromProject = (project) => {
-    try {
-      if (project.devices) return Object.entries(project.devices).map(([id, device]) => ({ id, ...device }));
-      if (project.vehicles) return Object.entries(project.vehicles).map(([id, vehicle]) => ({ id, type: 'vehicle', ...vehicle }));
-      if (project.sensors) return Object.entries(project.sensors).map(([id, sensor]) => ({ id, type: 'sensor', ...sensor }));
-      return [];
-    } catch (error) {
-      console.error("Error extracting devices:", error);
-      return [];
+const getDevicesFromProject = (project) => {
+  try {
+    let devices = [];
+    
+    // Handle vehicles (for fleet_tracking)
+    if (project.vehicles) {
+      devices = [...devices, ...Object.entries(project.vehicles).map(([id, vehicle]) => ({ 
+        id, 
+        type: 'vehicle', 
+        ...vehicle 
+      }))];
     }
-  };
+    
+    // Handle sensors (for industrial_monitoring)
+    if (project.sensors) {
+      devices = [...devices, ...Object.entries(project.sensors).map(([id, sensor]) => ({ 
+        id, 
+        type: 'sensor', 
+        ...sensor 
+      }))];
+    }
+    
+    // Handle devices (for smart_home)
+    if (project.devices) {
+      devices = [...devices, ...Object.entries(project.devices).map(([id, device]) => ({ 
+        id, 
+        type: 'device', 
+        ...device 
+      }))];
+    }
+    
+    return devices;
+  } catch (error) {
+    console.error("Error extracting devices:", error);
+    return [];
+  }
+};
 
   const filteredProjects = projects.filter(project => {
     try {
@@ -1252,31 +1291,256 @@ const handleProjectAccess = async (project) => {
       <h2>{selectedProject.name}</h2>
       <p className="project-description">{selectedProject.description}</p>
       <div className="project-details">
-        <h3>Devices ({selectedProject.devices.length})</h3>
-        <div className="devices-grid">
-            {selectedProject.devices.map(device => (
-              <div key={device.id} className="device-card">
-                <h4>{device.id}</h4>
-                <p>Type: {device.type || 'device'}</p>
-                <p>Status: {device.status || 'no status'}</p>
-                {device.lastSeen && <p>Last seen: {device.lastSeen}</p>}
+        {selectedProject.id === 'fleet_tracking' && (
+    <>
+      <h3>Vehicle Locations</h3>
+      <div style={{ height: '400px', marginBottom: '20px', border: '1px solid #d9d9d9', borderRadius: '8px' }}>
+        <MapContainer 
+  center={[12.9716, 77.5946]} 
+  zoom={10} 
+  style={{ height: '100%', width: '100%' }}
+>
+  <TileLayer
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  />
+  {selectedProject.devices.map(vehicle => (
+    vehicle.location && (
+      <Marker key={vehicle.id} position={[vehicle.location.lat, vehicle.location.lng]}>
+        <Popup>
+          <div style={{ minWidth: '200px' }}>
+            <Typography.Title level={5} style={{ margin: '0 0 12px 0' }}>{vehicle.id}</Typography.Title>
+            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <DashboardOutlined style={{ color: '#1890ff' }} />
+                <Typography.Text strong>Speed:</Typography.Text>
+                <Tag color="blue">{vehicle.speed}</Tag>
               </div>
-            ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CarOutlined style={{ color: '#52c41a' }} />
+                <Typography.Text strong>Fuel:</Typography.Text>
+                <Progress 
+                  percent={parseInt(vehicle.fuel)} 
+                  size="small" 
+                  style={{ flex: 1, margin: 0 }}
+                  strokeColor={parseInt(vehicle.fuel) > 30 ? '#52c41a' : '#ff4d4f'}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ToolOutlined style={{ color: vehicle.maintenance_due ? '#ff4d4f' : '#52c41a' }} />
+                <Typography.Text strong>Maintenance:</Typography.Text>
+                <Tag color={vehicle.maintenance_due ? 'red' : 'green'}>
+                  {vehicle.maintenance_due ? 'Due' : 'OK'}
+                </Tag>
+              </div>
+            </Space>
           </div>
-           {selectedProject.alerts.length > 0 && (
-            <>
-              <h3>Alerts ({selectedProject.alerts.length})</h3>
-              <div className="alerts-grid">
-                {selectedProject.alerts.map((alert, index) => (
-                  <div key={index} className={`alert-card alert-${alert.priority || 'medium'}`}>
-                    <h4>{alert.title || 'Alert'}</h4>
-                    <p>{alert.message}</p>
-                    {alert.timestamp && <p>Time: {alert.timestamp}</p>}
-                  </div>
-                ))}
+        </Popup>
+      </Marker>
+    )
+  ))}
+</MapContainer>
+      </div>
+      
+      <h3>Vehicle Details</h3>
+      <div className="devices-grid">
+  <Row gutter={[16, 16]}>
+    {selectedProject.devices.map(vehicle => (
+      <Col xs={24} sm={12} md={8} lg={16} key={vehicle.id}>
+        <Card 
+          hoverable
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CarOutlined style={{ color: '#1890ff' }} />
+              <Typography.Text strong>{vehicle.id}</Typography.Text>
+            </div>
+          }
+          style={{ height: '100%' }}
+        >
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {/* Speed */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <DashboardOutlined style={{ color: '#1890ff' }} />
+                <Typography.Text>Speed:</Typography.Text>
               </div>
-            </>
-          )}
+              <Tag color="blue" style={{ margin: 0 }}>
+                {vehicle.speed}
+              </Tag>
+            </div>
+
+            {/* Fuel */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <CarOutlined style={{ color: '#52c41a' }} />
+                <Typography.Text>Fuel:</Typography.Text>
+              </div>
+              <Progress 
+                percent={parseInt(vehicle.fuel)} 
+                size="small"
+                strokeColor={parseInt(vehicle.fuel) > 30 ? '#52c41a' : '#ff4d4f'}
+                showInfo={true}
+                format={() => `${vehicle.fuel}`}
+              />
+            </div>
+
+            {/* Maintenance */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <ToolOutlined style={{ color: vehicle.maintenance_due ? '#ff4d4f' : '#52c41a' }} />
+                <Typography.Text>Maintenance:</Typography.Text>
+              </div>
+              <Tag color={vehicle.maintenance_due ? 'red' : 'green'} style={{ margin: 0 }}>
+                {vehicle.maintenance_due ? 'Due' : 'OK'}
+              </Tag>
+            </div>
+
+            {/* Location */}
+            {vehicle.location && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <EnvironmentOutlined style={{ color: '#722ed1' }} />
+                  <Typography.Text>Location:</Typography.Text>
+                </div>
+                <Typography.Text type="secondary" style={{ fontSize: '12px' }}>
+                  {vehicle.location.lat.toFixed(4)}, {vehicle.location.lng.toFixed(4)}
+                </Typography.Text>
+              </div>
+            )}
+          </Space>
+        </Card>
+      </Col>
+    ))}
+  </Row>
+</div>
+    </>
+  )}
+
+
+  {/* Industrial Monitoring - Show Sensors */}
+  {/* Industrial Monitoring - Show Sensors */}
+{selectedProject.id === 'industrial_monitoring' && (
+  <div style={{ padding: '16px' }}>
+
+
+    <Title level={4} style={{ marginBottom: '16px' }}>
+      <DashboardOutlined style={{ marginRight: '8px' }} />
+      Sensors ({(selectedProject.devices || []).length})
+    </Title>
+    
+    <Row gutter={[16, 16]}>
+      {(selectedProject.devices || []).map((sensor) => {
+        // Status configuration
+        const getStatusConfig = (status) => {
+          switch (status) {
+            case 'normal':
+              return { color: 'success', icon: <CheckCircleOutlined />, text: 'Normal' };
+            case 'warning':
+              return { color: 'warning', icon: <WarningOutlined />, text: 'Warning' };
+            case 'critical':
+              return { color: 'error', icon: <ExclamationCircleOutlined />, text: 'Critical' };
+            default:
+              return { color: 'default', icon: <CheckCircleOutlined />, text: 'Unknown' };
+          }
+        };
+
+        // Type icon configuration
+        const getTypeIcon = (type) => {
+          switch (type.toLowerCase()) {
+            case 'temperature':
+              return <FireOutlined style={{ color: '#ff4d4f' }} />;
+            case 'pressure':
+              return <DashboardOutlined style={{ color: '#1890ff' }} />;
+            default:
+              return <DashboardOutlined />;
+          }
+        };
+
+        const statusConfig = getStatusConfig(sensor.status);
+
+        return (
+          <Col xs={24} sm={12} md={8} lg={6} key={sensor.id}>
+            <Card
+              size="small"
+              hoverable
+              style={{
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              }}
+              bodyStyle={{ padding: '16px' }}
+            >
+              <Space direction="vertical" style={{ width: '100%' }} size="small">
+                {/* Sensor ID Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text strong style={{ fontSize: '16px' }}>
+                    {sensor.id.toUpperCase()}
+                  </Text>
+                  <Badge 
+                    status={statusConfig.color} 
+                    text={statusConfig.text}
+                  />
+                </div>
+
+                <Divider style={{ margin: '8px 0' }} />
+
+                {/* Sensor Details */}
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Type:</Text>
+                    <Tag icon={getTypeIcon(sensor.type)} color="blue">
+                      {sensor.type.charAt(0).toUpperCase() + sensor.type.slice(1)}
+                    </Tag>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Value:</Text>
+                    <Text strong style={{ 
+                      fontSize: '18px', 
+                      color: sensor.status === 'warning' ? '#faad14' : 
+                             sensor.status === 'critical' ? '#ff4d4f' : '#52c41a' 
+                    }}>
+                      {sensor.value}
+                    </Text>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Status:</Text>
+                    <Tag 
+                      icon={statusConfig.icon} 
+                      color={statusConfig.color}
+                    >
+                      {statusConfig.text}
+                    </Tag>
+                  </div>
+                </Space>
+              </Space>
+            </Card>
+          </Col>
+        );
+      })}
+    </Row>
+    
+    {/* Empty State */}
+    {(selectedProject.devices || []).length === 0 && (
+      <Card style={{ textAlign: 'center', padding: '40px' }}>
+        <DashboardOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />
+        <Title level={4} type="secondary" style={{ marginTop: '16px' }}>
+          No sensors found
+        </Title>
+        <Text type="secondary">
+          No sensors are currently configured for this project.
+        </Text>
+      </Card>
+    )}
+  </div>
+)}
+
+
+{/* Smart Home - Show Devices */}
+{selectedProject.id === 'smart_home' && (
+  <SmartHomeDevices selectedProject={selectedProject} />
+)}
+
       </div>
     </div>
   );
