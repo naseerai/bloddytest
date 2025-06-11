@@ -120,6 +120,26 @@ L.Icon.Default.mergeOptions({
     return () => cleanupListeners();
   }, [projects]);
   
+
+const logProjectAccess = async (projectId, userId, userEmail, userRole) => {
+  try {
+    const accessLogData = {
+      projectId: projectId,
+      userId: userId,
+      userEmail: userEmail,
+      userRole: userRole,
+      accessTime: serverTimestamp(),
+      timestamp: new Date().toISOString() // Additional readable timestamp
+    };
+
+    await addDoc(collection(db, 'project_access_logs'), accessLogData);
+    console.log('Project access logged:', { projectId, userId, userEmail });
+  } catch (error) {
+    console.error('Error logging project access:', error);
+    // Don't throw error - access logging shouldn't break the main functionality
+  }
+};
+
 useEffect(() => {
   if (!currentUser) return;
 
@@ -1066,6 +1086,9 @@ message.error('Your session has been terminated.');
 // Enhanced handleProjectAccess with better queue management
 const handleProjectAccess = async (project) => {
   console.log('handleProjectAccess called for project:', project.id, 'by user:', currentUser.email);
+  
+  // Log project access first
+  await logProjectAccess(project.id, currentUser.id, currentUser.email, currentUser.role);
   
   // Check if user is already in queue for this project and remove duplicates
   const existingQueueQuery = query(

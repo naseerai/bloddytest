@@ -13,6 +13,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@antv/g2plot": "^2.4.33",
     "@emailjs/browser": "^4.4.1",
     "antd": "^5.25.3",
     "cors": "^2.8.5",
