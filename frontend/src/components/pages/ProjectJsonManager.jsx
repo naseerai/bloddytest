@@ -77,10 +77,17 @@ const ProjectFormManager = ({ currentUser }) => {
 
       <Modal
         open={visible}
-        onCancel={handleCancel}
-        footer={null}
-        title={<Title level={4}>Add New Project</Title>}
-        width={800}
+  onCancel={handleCancel}
+  footer={null}
+  title={<Title level={4}>Add New Project</Title>}
+  width={800}
+  centered
+  bodyStyle={{
+    maxHeight: '60vh',
+    overflowY: 'auto',
+    paddingRight: 16
+  }}
+  destroyOnClose
       >
         <Form
           layout="vertical"
