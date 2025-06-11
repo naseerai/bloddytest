@@ -1213,57 +1213,67 @@ const handleProjectAccess = async (project) => {
   justifyContent: 'space-between',
   marginBottom: '16px'
 }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-    <button onClick={handleBackToList} className="back-button">
-      &larr; Back to Projects
-    </button>
-    
-    {/* Control Status Badge */}
-    <div style={{ 
-      padding: '4px 10px', 
-      borderRadius: '4px',
-      backgroundColor: activeSession ? '#f6ffed' : '#fff2e8',
-      border: activeSession ? '1px solid #b7eb8f' : '1px solid #ffbb96',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
+  <div style={{ 
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'space-between',
+  width: '100%'
+}}>
+  {/* Back Button - Left Side */}
+  <button onClick={handleBackToList} className="back-button">
+    &larr; Back to Projects
+  </button>
+  
+  {/* Control Status Badge - Slightly Left of Center */}
+  <div style={{ 
+    padding: '4px 10px', 
+    borderRadius: '4px',
+    backgroundColor: activeSession ? '#f6ffed' : '#fff2e8',
+    border: activeSession ? '1px solid #b7eb8f' : '1px solid #ffbb96',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    transform: 'translateX(-20px)'
+  }}>
+    <span style={{ 
+      width: '6px', 
+      height: '6px', 
+      borderRadius: '50%', 
+      backgroundColor: activeSession ? '#52c41a' : '#fa541c'
+    }}></span>
+    <span style={{ 
+      color: activeSession ? '#52c41a' : '#fa541c', 
+      fontWeight: '500',
+      fontSize: '12px'
     }}>
-      <span style={{ 
-        width: '6px', 
-        height: '6px', 
-        borderRadius: '50%', 
-        backgroundColor: activeSession ? '#52c41a' : '#fa541c'
-      }}></span>
-      <span style={{ 
-        color: activeSession ? '#52c41a' : '#fa541c', 
-        fontWeight: '500',
-        fontSize: '12px'
-      }}>
-        {activeSession ? 'Control Access: Active' : 'View Only'}
-      </span>
-      {!activeSession && (
-        <button 
-          onClick={() => {
-            setShowQueueModal(true);
-            setPendingProjectAccess(selectedProject.id);
-          }}
-          style={{
-            background: '#1890ff',
-            color: 'white',
-            border: 'none',
-            padding: '2px 6px',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            fontSize: '10px',
-            fontWeight: '500',
-            marginLeft: '6px'
-          }}
-        >
-          Get Control
-        </button>
-      )}
-    </div>
+      {activeSession ? 'Control Access: Active' : 'View Only'}
+    </span>
+    {!activeSession && (
+      <button 
+        onClick={() => {
+          setShowQueueModal(true);
+          setPendingProjectAccess(selectedProject.id);
+        }}
+        style={{
+          background: '#1890ff',
+          color: 'white',
+          border: 'none',
+          padding: '2px 6px',
+          borderRadius: '3px',
+          cursor: 'pointer',
+          fontSize: '10px',
+          fontWeight: '500',
+          marginLeft: '6px'
+        }}
+      >
+        Get Control
+      </button>
+    )}
   </div>
+
+  {/* Empty div for spacing */}
+  <div></div>
+</div>
   
   {/* Keep your existing session timer on the right side */}
   {activeSession && currentUser.role === 'guest' && (
