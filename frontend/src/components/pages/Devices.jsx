@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card,Row,Col, Space,Badge,Divider, Tag, Progress, Typography } from "antd";
+import { Card,Row,Col, Space,Badge,Divider, Tag, Progress, Typography,message } from "antd";
 import { InfoOutlined,DashboardOutlined, CarOutlined,EnvironmentOutlined, ToolOutlined,CheckCircleOutlined,WarningOutlined,ExclamationCircleOutlined,FireOutlined,HomeOutlined,BulbOutlined,CameraOutlined,ThunderboltOutlined,StopOutlined,ClockCircleOutlined } from "@ant-design/icons";
 import {EditOutlined, DeleteOutlined} from "@ant-design/icons";
 import { realtimeDb } from '../firebase';
@@ -37,7 +37,7 @@ const Devices = ({ currentUser }) => {
   const [error, setError] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [processedRequests, setProcessedRequests] = useState(new Set());
-  
+  const [currentView, setCurrentView] = useState('list');
   // Project access control states
   const [projectSessions, setProjectSessions] = useState({});
   const [queues, setQueues] = useState({});
@@ -148,7 +148,7 @@ useEffect(() => {
         if (notification.type === 'session_started') {
           // For guests, always auto-redirect
           if (currentUser.role === 'guest' && notification.autoRedirect) {
-            alert('Your session has started! Redirecting to project dashboard...');
+            message.success('Your session has started! Redirecting to project dashboard...');
             
             // Force a page reload to ensure proper state sync
             setTimeout(() => {
@@ -166,7 +166,7 @@ useEffect(() => {
         
         // Handle session termination notifications
         if (notification.type === 'session_terminated') {
-          alert('Your session has been terminated by an administrator.');
+          message.error('Your session has been terminated by an administrator.');
           
           // Clear local session state immediately
           setActiveSession(null);
@@ -605,7 +605,7 @@ useEffect(() => {
             });
             
             console.log('Session time extension processed successfully');
-            alert(`Your session has been extended by ${requestData.requestedTime} minutes!`);
+            message.success(`Your session has been extended by ${requestData.requestedTime} minutes!`);
             
           } catch (error) {
             console.error('Error processing time extension:', error);
@@ -839,7 +839,7 @@ const joinQueue = async (projectId) => {
     const existingQueueSnapshot = await getDocs(existingQueueQuery);
     
     if (!existingQueueSnapshot.empty) {
-      alert('You are already in the queue for this project.');
+      message.warning('You are already in the queue for this project.');
       setShowQueueModal(false);
       return;
     }
@@ -858,7 +858,7 @@ const joinQueue = async (projectId) => {
     setShowQueueModal(false);
     
     // Show confirmation message
-    alert(`You have been added to the queue. You will be notified when it's your turn.`);
+    message.info(`You have been added to the queue. You will be notified when it's your turn.`);
     
   } catch (error) {
     console.error('Error joining queue:', error);
@@ -969,7 +969,7 @@ const joinQueue = async (projectId) => {
       };
 
       await addDoc(collection(db, 'time_extension_requests'), requestData);
-      alert('Time extension request sent to administrators');
+      message.info('Time extension request sent to administrators');
     } catch (error) {
       console.error('Error requesting time extension:', error);
     }
@@ -977,7 +977,7 @@ const joinQueue = async (projectId) => {
 
   const terminateSession = async (sessionId) => {
   if (!['superadmin', 'admin'].includes(currentUser.role)) {
-    alert('You do not have permission to terminate sessions.');
+    message.error('You do not have permission to terminate sessions.');
     return;
   }
 
@@ -986,7 +986,7 @@ const joinQueue = async (projectId) => {
     const sessionDoc = await getDoc(doc(db, 'project_sessions', sessionId));
     
     if (!sessionDoc.exists()) {
-      alert('Session not found.');
+      message.error('Session not found.');
       return;
     }
     
@@ -1012,14 +1012,14 @@ const joinQueue = async (projectId) => {
     
     await addDoc(collection(db, 'user_notifications'), notificationData);
     
-    alert(`Session terminated successfully for user: ${terminatedUserEmail}`);
+    message.success(`Session terminated successfully for user: ${terminatedUserEmail}`);
     
     // Process the queue for the freed project
     await processQueue(projectId);
     
   } catch (error) {
     console.error('Error terminating session:', error);
-    alert('Failed to terminate session. Please try again.');
+    message.error('Failed to terminate session. Please try again.');
   }
 };
 
@@ -1045,7 +1045,7 @@ useEffect(() => {
       }
       
       // Show alert and redirect
-      alert('Your session has been terminated.');
+      message.error('Your session has been terminated.');
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -1152,11 +1152,14 @@ const handleProjectAccess = async (project) => {
 };
 
   const handleBackToList = () => {
-    if (activeSession) {
-      endSession(activeSession.id);
-    }
+  if (activeSession) {
+    endSession(activeSession.id).then(() => {
+      setSelectedProject(null); // Clear after session is ended
+    });
+  } else {
     setSelectedProject(null);
-  };
+  }
+};
 
   if (loading) return (
     <div className="content-card">
