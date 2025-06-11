@@ -151,9 +151,11 @@ useEffect(() => {
             message.success('Your session has started! Redirecting to project dashboard...');
             
             // Force a page reload to ensure proper state sync
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
+            const project = projects.find(p => p.id === notification.projectId);
+if (project) {
+  setSelectedProject(project);
+  // (optional) Firestore session already created by server, should be picked up by listeners
+}
           }
           
           // Delete the notification after processing
@@ -185,9 +187,11 @@ useEffect(() => {
           }
           
           // Force redirect back to devices list
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          setActiveSession(null);
+setSelectedProject(null);
+setCountdown(0);
+if (countdownInterval.current) clearInterval(countdownInterval.current);
+
         }
       }
     });
@@ -1045,10 +1049,12 @@ useEffect(() => {
       }
       
       // Show alert and redirect
-      message.error('Your session has been terminated.');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      setActiveSession(null);
+setSelectedProject(null);
+setCountdown(0);
+if (countdownInterval.current) clearInterval(countdownInterval.current);
+message.error('Your session has been terminated.');
+
     }
   }, (error) => {
     console.error('Error monitoring session:', error);
