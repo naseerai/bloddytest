@@ -1,17 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Line, Column, Pie, Area } from '@antv/g2plot';
 import Sidebar from './pages/Sidebar';
 import UserManagement from './pages/UserManagement';
 import Devices from './pages/Devices';
 import { ActiveGuests, GuestQueues, SessionLogs, TimeRequests } from './pages/GuestManagement';
 import TourGuide from './TourGuide';
 import '../components/styles/Dashboard.css';
+import { MdOutlineTrendingUp } from "react-icons/md";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState({
+    dailyAccess: [],
+    projectAccess: [],
+    userRoleDistribution: [],
+    hourlyAccess: [],
+    weeklyAccess: [],
+    monthlyAccess: [],
+    topUsers: [],
+    sessionDuration: { sessions: [], roleAverages: [] }
+  });
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsFilters, setAnalyticsFilters] = useState({
+    days: 7,
+    limit: 1000
+  });
+  
+  // Refs for G2plot containers
+  const dailyAccessRef = useRef(null);
+  const projectAccessRef = useRef(null);
+  const userRoleRef = useRef(null);
+  const hourlyAccessRef = useRef(null);
+  const weeklyAccessRef = useRef(null);
+  const monthlyAccessRef = useRef(null);
+  
+  // Chart instances
+  const chartsRef = useRef({});
   
   // Get tab from URL params or default to 'dashboard'
   const currentTab = searchParams.get('tab') || 'dashboard';
@@ -29,6 +57,9 @@ const Dashboard = () => {
     return null;
   }
 
+  // Check if user should see analytics
+  const shouldShowAnalytics = ['superadmin', 'admin', 'user'].includes(currentUser.role);
+
   // Update activeTab when URL changes
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') || 'dashboard';
@@ -44,6 +75,426 @@ const Dashboard = () => {
   const handleLogout = () => {
     localStorage.removeItem('currentUser');
     navigate('/');
+  };
+
+  // Fetch analytics data with role-based filtering
+  const fetchAnalyticsData = async (filters = {}) => {
+    if (!shouldShowAnalytics) return;
+    
+    setAnalyticsLoading(true);
+    try {
+      // Import the analytics service
+      const { AnalyticsService } = await import('./services/analyticsService');
+      
+      // Apply role-based filtering
+      const data = await AnalyticsService.fetchRoleBasedAnalytics(
+        currentUser.role,
+        currentUser.email,
+        { ...analyticsFilters, ...filters }
+      );
+      
+      setAnalyticsData(data);
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+      
+      // Fallback to mock data if Firebase fails (only for non-guests)
+      if (shouldShowAnalytics) {
+        const mockData = generateMockAnalyticsData();
+        setAnalyticsData(mockData);
+      }
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+// Generate mock data based on user role
+const generateMockAnalyticsData = () => {
+  const now = new Date();
+  const projects = ['fleet_tracking', 'smart_home', 'weather_station', 'security_system']; // ✅ Uncommented this line
+  const roles = ['guest', 'user', 'admin', 'superadmin'];
+  
+  // Filter projects based on user role
+  let availableProjects = projects;
+  if (currentUser.role === 'user') {
+    // Users might only see assigned projects
+    availableProjects = projects.slice(0, 2); // Example: only first 2 projects
+  }
+  
+  // Generate role-appropriate data
+  const generateDailyData = (days) => {
+    const dailyData = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      dailyData.push({
+        date: dateStr,
+        day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        accesses: Math.floor(Math.random() * 50) + 10,
+        uniqueUsers: Math.floor(Math.random() * 20) + 5
+      });
+    }
+    return dailyData;
+  };
+  
+  const generateProjectData = () => {
+    return availableProjects.map(project => ({
+      project: project.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      accesses: Math.floor(Math.random() * 100) + 20,
+      sessions: Math.floor(Math.random() * 80) + 15,
+      uniqueUsers: Math.floor(Math.random() * 30) + 10,
+      projectId: project
+    }));
+  };
+  
+  const generateRoleData = () => {
+    // Show different role distributions based on user role
+    let availableRoles = roles;
+    if (currentUser.role === 'user') {
+      availableRoles = ['user']; // Users might only see their own role data
+    } else if (currentUser.role === 'admin') {
+      availableRoles = ['guest', 'user', 'admin']; // Admins might not see superadmin data
+    }
+    
+    return availableRoles.map(role => ({
+      role: role.charAt(0).toUpperCase() + role.slice(1),
+      count: Math.floor(Math.random() * 30) + 5,
+      percentage: Math.floor(Math.random() * 40) + 10
+    }));
+  };
+  
+  const generateHourlyData = () => {
+    const hourlyData = [];
+    for (let hour = 0; hour < 24; hour++) {
+      hourlyData.push({
+        hour: `${hour.toString().padStart(2, '0')}:00`,
+        accesses: Math.floor(Math.random() * 20) + 1,
+        uniqueUsers: Math.floor(Math.random() * 10) + 1
+      });
+    }
+    return hourlyData;
+  };
+  
+  return {
+    dailyAccess: generateDailyData(analyticsFilters.days),
+    projectAccess: generateProjectData(),
+    userRoleDistribution: generateRoleData(),
+    hourlyAccess: generateHourlyData(),
+    weeklyAccess: generateDailyData(4).map((item, index) => ({
+      ...item,
+      week: `Week ${index + 1}`
+    })),
+    monthlyAccess: generateDailyData(6).map((item, index) => ({
+      ...item,
+      month: new Date(now.getFullYear(), now.getMonth() - index, 1)
+        .toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    })),
+    topUsers: [],
+    sessionDuration: { sessions: [], roleAverages: [] }
+  };
+};
+
+  // Initialize analytics data
+  useEffect(() => {
+    if (activeTab === 'dashboard' && shouldShowAnalytics) {
+      fetchAnalyticsData();
+    }
+  }, [activeTab, currentUser.role]);
+
+  // Create charts when data is available
+  useEffect(() => {
+    if (analyticsData.dailyAccess.length > 0 && activeTab === 'dashboard' && shouldShowAnalytics) {
+      createCharts();
+    }
+    
+    return () => {
+      // Cleanup charts
+      Object.values(chartsRef.current).forEach(chart => {
+        if (chart && chart.destroy) {
+          chart.destroy();
+        }
+      });
+      chartsRef.current = {};
+    };
+  }, [analyticsData, activeTab]);
+
+  // Handle filter changes
+  const handleFilterChange = (newFilters) => {
+    setAnalyticsFilters(prev => ({ ...prev, ...newFilters }));
+    fetchAnalyticsData(newFilters);
+  };
+
+  const createCharts = () => {
+    // Daily Access Trend
+    if (dailyAccessRef.current) {
+      const dailyChart = new Line(dailyAccessRef.current, {
+        data: analyticsData.dailyAccess,
+        xField: 'day',
+        yField: 'accesses',
+        smooth: true,
+        color: '#1890ff',
+        point: {
+          size: 5,
+          shape: 'diamond',
+          style: {
+            fill: 'white',
+            stroke: '#1890ff',
+            lineWidth: 2,
+          },
+        },
+        tooltip: {
+          formatter: (datum) => {
+            return { 
+              name: 'Daily Access', 
+              value: `${datum.accesses} accesses (${datum.uniqueUsers || 0} users)` 
+            };
+          },
+        },
+        yAxis: {
+          title: {
+            text: 'Number of Accesses',
+          },
+        },
+        xAxis: {
+          title: {
+            text: `Last ${analyticsFilters.days} Days`,
+          },
+        },
+      });
+      dailyChart.render();
+      chartsRef.current.dailyChart = dailyChart;
+    }
+
+    // Project Access Distribution
+    if (projectAccessRef.current) {
+      const projectChart = new Column(projectAccessRef.current, {
+        data: analyticsData.projectAccess,
+        xField: 'project',
+        yField: 'accesses',
+        color: '#52c41a',
+        columnWidthRatio: 0.6,
+        tooltip: {
+          formatter: (datum) => {
+            return { 
+              name: 'Project Access', 
+              value: `${datum.accesses} sessions (${datum.uniqueUsers || 0} users)` 
+            };
+          },
+        },
+        yAxis: {
+          title: {
+            text: 'Total Accesses',
+          },
+        },
+        xAxis: {
+          title: {
+            text: 'IoT Projects',
+          },
+        },
+      });
+      projectChart.render();
+      chartsRef.current.projectChart = projectChart;
+    }
+
+    // User Role Distribution (only for superadmin and admin)
+    if (userRoleRef.current && ['superadmin', 'admin','user'].includes(currentUser.role)) {
+      const roleChart = new Pie(userRoleRef.current, {
+        data: analyticsData.userRoleDistribution,
+        angleField: 'count',
+        colorField: 'role',
+        radius: 0.8,
+        label: {
+          type: 'outer',
+          content: '{name} ({percentage}%)',
+        },
+        interactions: [{ type: 'element-active' }],
+        color: ['#1890ff', '#52c41a', '#faad14', '#f5222d'],
+      });
+      roleChart.render();
+      chartsRef.current.roleChart = roleChart;
+    }
+
+    // Hourly Access Pattern
+    if (hourlyAccessRef.current) {
+      const hourlyChart = new Area(hourlyAccessRef.current, {
+        data: analyticsData.hourlyAccess,
+        xField: 'hour',
+        yField: 'accesses',
+        smooth: true,
+        color: '#722ed1',
+        areaStyle: {
+          fill: 'l(270) 0:#722ed1 1:#d3adf7',
+        },
+        tooltip: {
+          formatter: (datum) => {
+            return { 
+              name: 'Hourly Access', 
+              value: `${datum.accesses} sessions (${datum.uniqueUsers || 0} users)` 
+            };
+          },
+        },
+        yAxis: {
+          title: {
+            text: 'Sessions',
+          },
+        },
+        xAxis: {
+          title: {
+            text: 'Hour of Day',
+          },
+        },
+      });
+      hourlyChart.render();
+      chartsRef.current.hourlyChart = hourlyChart;
+    }
+  };
+
+  const renderAnalyticsFilters = () => {
+    if (!shouldShowAnalytics) return null;
+
+    return (
+      <div className="analytics-filters" style={{
+        display: 'flex',
+        gap: '15px',
+        marginBottom: '20px',
+        padding: '15px',
+        background: '#f5f5f5',
+        borderRadius: '8px',
+        alignItems: 'center'
+      }}>
+        <div className="filter-group">
+          <label>Time Range:</label>
+          <select 
+            value={analyticsFilters.days} 
+            onChange={(e) => handleFilterChange({ days: parseInt(e.target.value) })}
+            style={{ marginLeft: '8px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            <option value={7}>Last 7 Days</option>
+            <option value={14}>Last 14 Days</option>
+            <option value={30}>Last 30 Days</option>
+            <option value={90}>Last 3 Months</option>
+          </select>
+        </div>
+        
+        {['superadmin', 'admin','user'].includes(currentUser.role) && (
+          <div className="filter-group">
+            <label>Data Limit:</label>
+            <select 
+              value={analyticsFilters.limit} 
+              onChange={(e) => handleFilterChange({ limit: parseInt(e.target.value) })}
+              style={{ marginLeft: '8px', padding: '4px 8px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              <option value={500}>500 Records</option>
+              <option value={1000}>1000 Records</option>
+              <option value={2000}>2000 Records</option>
+              <option value={5000}>5000 Records</option>
+            </select>
+          </div>
+        )}
+        
+        <button 
+          onClick={() => fetchAnalyticsData()}
+          disabled={analyticsLoading}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '4px',
+            border: 'none',
+            background: '#1890ff',
+            color: 'white',
+            cursor: analyticsLoading ? 'not-allowed' : 'pointer',
+            opacity: analyticsLoading ? 0.6 : 1
+          }}
+        >
+          {analyticsLoading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
+    );
+  };
+
+  const renderAnalyticsCharts = () => {
+    if (!shouldShowAnalytics) return null;
+
+    const getGridColumns = () => {
+      switch (currentUser.role) {
+        case 'superadmin':
+          return 'repeat(auto-fit, minmax(400px, 1fr))';
+        case 'admin':
+          return 'repeat(auto-fit, minmax(450px, 1fr))';
+        case 'user':
+          return 'repeat(auto-fit, minmax(450px, 1fr))';
+        default:
+          return 'repeat(auto-fit, minmax(400px, 1fr))';
+      }
+    };
+
+    return (
+      <div className="analytics-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: getGridColumns(),
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        {/* Daily Access Trend - All roles */}
+        <div className="chart-container" style={{
+          background: 'white',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          minHeight: '300px'
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#1890ff' }}>
+            <MdOutlineTrendingUp style={{fontSize:"20px"}}/> Daily Access Trend
+            {analyticsLoading && <span style={{ fontSize: '12px', color: '#666' }}> (Loading...)</span>}
+          </h3>
+          <div ref={dailyAccessRef} style={{ height: '250px' }}></div>
+        </div>
+        
+        {/* Project Access Distribution - All roles */}
+        <div className="chart-container" style={{
+          background: 'white',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          minHeight: '300px'
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#52c41a' }}>
+            🎯 Project Access Distribution
+          </h3>
+          <div ref={projectAccessRef} style={{ height: '250px' }}></div>
+        </div>
+        
+        {/* User Role Distribution - Superadmin and Admin only */}
+        {['superadmin', 'admin','user'].includes(currentUser.role) && (
+          <div className="chart-container" style={{
+            background: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            minHeight: '300px'
+          }}>
+            <h3 style={{ marginBottom: '15px', color: '#faad14' }}>
+              👥 User Role Distribution
+            </h3>
+            <div ref={userRoleRef} style={{ height: '250px' }}></div>
+          </div>
+        )}
+        
+        {/* Hourly Access Pattern - All roles */}
+        <div className="chart-container" style={{
+          background: 'white',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          minHeight: '300px'
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#722ed1' }}>
+            ⏰ Hourly Access Pattern
+          </h3>
+          <div ref={hourlyAccessRef} style={{ height: '250px' }}></div>
+        </div>
+      </div>
+    );
   };
 
   const renderContent = () => {
@@ -71,51 +522,11 @@ const Dashboard = () => {
                 <h2>Superadmin Dashboard</h2>
                 <p>Welcome back! You have complete system control and oversight.</p>
                 
-                <div className="dashboard-stats">
-                  <div className="stat-card" onClick={() => handleTabChange('users')}>
-                    <div className="stat-icon">👥</div>
-                    <div className="stat-info">
-                      <h3>Total Users</h3>
-                      <p>Manage all users in the system</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('admins')}>
-                    <div className="stat-icon">⚙️</div>
-                    <div className="stat-info">
-                      <h3>Admin Management</h3>
-                      <p>Control admin privileges</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('devices')}>
-                    <div className="stat-icon">🎯</div>
-                    <div className="stat-info">
-                      <h3>Project Access Control</h3>
-                      <p>Manage project sessions and queues</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('session-logs')}>
-                    <div className="stat-icon">📊</div>
-                    <div className="stat-info">
-                      <h3>Session Analytics</h3>
-                      <p>View detailed logs and reports</p>
-                    </div>
-                  </div>
-                </div>
+                {/* Analytics Filters */}
+                {renderAnalyticsFilters()}
                 
-                <div className="quick-actions">
-                  <h3>Quick Actions</h3>
-                  <div className="action-buttons">
-                    <button onClick={() => handleTabChange('active-guests')} className="action-btn">
-                      View Active Sessions
-                    </button>
-                    <button onClick={() => handleTabChange('time-requests')} className="action-btn">
-                      Process Time Requests
-                    </button>
-                    <button onClick={() => handleTabChange('session-logs')} className="action-btn">
-                      View Session Logs
-                    </button>
-                  </div>
-                </div>
+                {/* Analytics Charts Grid */}
+                {renderAnalyticsCharts()}
               </div>
             );
           case 'admin':
@@ -124,87 +535,25 @@ const Dashboard = () => {
                 <h2>Admin Dashboard</h2>
                 <p>Welcome back! You can manage users and monitor guest sessions effectively.</p>
                 
-                <div className="dashboard-stats">
-                  <div className="stat-card" onClick={() => handleTabChange('users')}>
-                    <div className="stat-icon">👥</div>
-                    <div className="stat-info">
-                      <h3>User Management</h3>
-                      <p>Manage system users</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('active-guests')}>
-                    <div className="stat-icon">🎯</div>
-                    <div className="stat-info">
-                      <h3>Guest Session Control</h3>
-                      <p>Monitor and manage guest access</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('guest-queues')}>
-                    <div className="stat-icon">📋</div>
-                    <div className="stat-info">
-                      <h3>Queue Management</h3>
-                      <p>Handle project access queues</p>
-                    </div>
-                  </div>
-                </div>
+                {/* Analytics Filters */}
+                {renderAnalyticsFilters()}
                 
-                <div className="quick-actions">
-                  <h3>Quick Actions</h3>
-                  <div className="action-buttons">
-                    <button onClick={() => handleTabChange('active-guests')} className="action-btn">
-                      Manage Active Guests
-                    </button>
-                    <button onClick={() => handleTabChange('time-requests')} className="action-btn">
-                      Review Time Requests
-                    </button>
-                    <button onClick={() => handleTabChange('guest-queues')} className="action-btn">
-                      Manage Queues
-                    </button>
-                  </div>
-                </div>
+                {/* Analytics Charts Grid */}
+                {renderAnalyticsCharts()}
               </div>
             );
           case 'user':
             return (
               <div className="content-card fade-in-up">
                 <h2>User Dashboard</h2>
-                <p>Welcome back! Access your assigned projects and monitor queue status.</p>
+                <p>Welcome back! Access your assigned projects and monitor your usage patterns.</p>
                 
-                <div className="dashboard-stats">
-                  <div className="stat-card">
-                    <div className="stat-icon">📊</div>
-                    <div className="stat-info">
-                      <h3>Your Profile</h3>
-                      <p>View and manage your profile</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('devices')}>
-                    <div className="stat-icon">🔧</div>
-                    <div className="stat-info">
-                      <h3>IoT Projects</h3>
-                      <p>Access your assigned projects</p>
-                    </div>
-                  </div>
-                  <div className="stat-card" onClick={() => handleTabChange('guest-queues')}>
-                    <div className="stat-icon">⏰</div>
-                    <div className="stat-info">
-                      <h3>Queue Status</h3>
-                      <p>Monitor project access queues</p>
-                    </div>
-                  </div>
-                </div>
+                {/* Analytics Filters */}
+                {renderAnalyticsFilters()}
                 
-                <div className="quick-actions">
-                  <h3>Quick Actions</h3>
-                  <div className="action-buttons">
-                    <button onClick={() => handleTabChange('devices')} className="action-btn">
-                      View Projects
-                    </button>
-                    <button onClick={() => handleTabChange('guest-queues')} className="action-btn">
-                      Check Queues
-                    </button>
-                  </div>
-                </div>
+                {/* Analytics Charts Grid */}
+                {renderAnalyticsCharts()}
+                
               </div>
             );
           default: // guest
@@ -294,6 +643,11 @@ const Dashboard = () => {
         <div className="header">
           <div className="header-title">
             <h1>{getPageTitle()}</h1>
+            {shouldShowAnalytics && activeTab === 'dashboard' && (
+              <span style={{ fontSize: '14px', color: '#666', marginLeft: '10px' }}>
+                Analytics enabled for {currentUser.role}
+              </span>
+            )}
           </div>
           <div className="user-info">
             <div className="user-details">
