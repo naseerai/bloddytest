@@ -1233,7 +1233,7 @@ const handleProjectAccess = async (project) => {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    transform: 'translateX(-20px)'
+    transform: 'translateX(-100px)'
   }}>
     <span style={{ 
       width: '6px', 
@@ -1244,7 +1244,7 @@ const handleProjectAccess = async (project) => {
     <span style={{ 
       color: activeSession ? '#52c41a' : '#fa541c', 
       fontWeight: '500',
-      fontSize: '12px'
+      fontSize: '15px'
     }}>
       {activeSession ? 'Control Access: Active' : 'View Only'}
     </span>
@@ -1261,7 +1261,7 @@ const handleProjectAccess = async (project) => {
           padding: '2px 6px',
           borderRadius: '3px',
           cursor: 'pointer',
-          fontSize: '10px',
+          fontSize: '15px',
           fontWeight: '500',
           marginLeft: '6px'
         }}
@@ -1299,7 +1299,7 @@ const handleProjectAccess = async (project) => {
 </div>
       
       <h2>{selectedProject.name}</h2>
-      <p className="project-description">{selectedProject.description}</p>
+      {/* <p className="project-description">{selectedProject.description}</p> */}
       <div className="project-details">
         {selectedProject.id === 'fleet_tracking' && (
     <>
@@ -1579,9 +1579,9 @@ const handleDeleteProject = async (project, e) => {
   // Render projects list
   return (
   <div className="content-card">
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-  <ProjectJsonManager currentUser={currentUser} />
-</div>
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+      <ProjectJsonManager currentUser={currentUser} />
+    </div>
 
     {filteredProjects.length === 0 ? (
       <div>
@@ -1598,320 +1598,387 @@ const handleDeleteProject = async (project, e) => {
         </button>
       </div>
     ) : (
-      <div className="projects-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+      <div 
+        className="projects-grid" 
+        style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+          gap: '16px',
+          // Control grid flow to prevent items moving up
+          gridAutoFlow: 'row',
+          alignItems: 'start',
+          justifyItems: 'stretch',
+          // Add max height and scroll
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '8px',
+          // Ensure consistent row heights
+          gridAutoRows: 'min-content'
+        }}
+      >
         {filteredProjects.map(project => {
-          const status = getProjectStatus(project.id);
-          const userHasActiveSession = Object.values(projectSessions[project.id] || {})
-            .some(session => session.userId === currentUser.id && session.status === 'active');
-          const info = userQueueInfo[project.id];
-          const isFlipped = flippedCards.has(project.id);
-          
-          // Default fallback image
-          const defaultImage = 'https://i.pinimg.com/736x/7f/5c/48/7f5c48b1112427bce292d0b06b4cafb5.jpg';
-          const projectImage = project.image && project.image.trim() !== '' ? project.image : defaultImage;
+            const status = getProjectStatus(project.id);
+            const userHasActiveSession = Object.values(projectSessions[project.id] || {})
+              .some(session => session.userId === currentUser.id && session.status === 'active');
+            const info = userQueueInfo[project.id];
+            const isFlipped = flippedCards.has(project.id);
+            
+            // Default fallback image
+            const defaultImage = 'https://i.pinimg.com/736x/7f/5c/48/7f5c48b1112427bce292d0b06b4cafb5.jpg';
+            const projectImage = project.image && project.image.trim() !== '' ? project.image : defaultImage;
 
-          
-          return (
-            <div key={project.id} style={{ perspective: '1000px', height: '300px' }}>
+            return (
               <div 
-                style={{
+                key={`project-${project.id}-${project.name}`} 
+                style={{ 
+                  perspective: '1000px', 
+                  height: '360px', // Fixed height to prevent grid misalignment
+                  minHeight: '360px',
+                  isolation: 'isolate',
                   position: 'relative',
-                  width: '100%',
-                  height: '100%',
-                  transformStyle: 'preserve-3d',
-                  transition: 'transform 0.6s',
-                  transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'
+                  zIndex: 1,
+                  // Prevent shrinking
+                  flexShrink: 0
                 }}
               >
-                {/* Front Side */}
-                <Card
-                  hoverable
+                <div 
                   style={{
-                    position: 'absolute',
+                    position: 'relative',
                     width: '100%',
-                    height: '120%',
-                    backfaceVisibility: 'hidden',
-                    border: '1px solid #d9d9d9'
+                    height: '100%',
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 0.6s ease-in-out',
+                    transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                    // Prevent z-index issues
+                    zIndex: isFlipped ? 10 : 1
                   }}
-                  cover={
-                    <div style={{ 
-                      height: '200px', 
-                      backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${projectImage})`,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'white',
-                      fontSize: '24px',
-                      fontWeight: 'bold',
-                      position: 'relative',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)'
-                    }}>
-                      {project.name}
-                     <div style={{
-  position: 'absolute',
-  top: '10px',
-  right: '10px',
-  display: 'flex',
-  gap: '8px'
-}}>
-  {['superadmin', 'admin'].includes(currentUser.role) && (
-    <>
-      <EditOutlined 
-        style={{
-          fontSize: '15px',
-          color: 'white',
-          cursor: 'pointer',
-          padding: '5px',
-          borderRadius: '50%',
-          backgroundColor: 'rgba(255,255,255,0.2)',
-          backdropFilter: 'blur(10px)'
-        }}
-        onClick={(e) => handleEditProject(project, e)}
-      />
-      <DeleteOutlined 
-        style={{
-          fontSize: '15px',
-          color: 'white',
-          cursor: 'pointer',
-          padding: '5px',
-          borderRadius: '50%',
-          backgroundColor: 'rgba(255,255,255,0.2)',
-          backdropFilter: 'blur(10px)'
-        }}
-        onClick={(e) => handleDeleteProject(project, e)}
-      />
-    </>
-  )}
-  <InfoOutlined 
-    style={{
-      fontSize: '15px',
+                >
+                  {/* Front Side */}
+                  <Card
+  style={{
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    backfaceVisibility: 'hidden',
+    border: '1px solid #d9d9d9',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer'
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.transform = 'translateY(-2px)';
+    e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+  }}
+  cover={
+    <div style={{ 
+      height: '200px', 
+      backgroundImage: `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${projectImage})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       color: 'white',
-      cursor: 'pointer',
-      padding: '5px',
-      borderRadius: '50%',
-      backgroundColor: 'rgba(255,255,255,0.2)',
-      backdropFilter: 'blur(10px)'
-    }}
-    onClick={(e) => handleCardFlip(project.id, e)}
-  />
-</div>
-                    </div>
-                  }
+      fontSize: '24px',
+      fontWeight: 'bold',
+      position: 'relative',
+      textShadow: '2px 2px 4px rgba(0,0,0,0.8)'
+    }}>
+      {project.name}
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        display: 'flex',
+        gap: '8px'
+      }}>
+        {['superadmin', 'admin'].includes(currentUser.role) && (
+          <>
+            <EditOutlined 
+              style={{
+                fontSize: '15px',
+                color: 'white',
+                cursor: 'pointer',
+                padding: '5px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                backdropFilter: 'blur(10px)'
+              }}
+              onClick={(e) => handleEditProject(project, e)}
+            />
+            <DeleteOutlined 
+              style={{
+                fontSize: '15px',
+                color: 'white',
+                cursor: 'pointer',
+                padding: '5px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                backdropFilter: 'blur(10px)'
+              }}
+              onClick={(e) => handleDeleteProject(project, e)}
+            />
+          </>
+        )}
+        <InfoOutlined 
+          style={{
+            fontSize: '15px',
+            color: 'white',
+            cursor: 'pointer',
+            padding: '5px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(10px)'
+          }}
+          onClick={(e) => handleCardFlip(project.id, e)}
+        />
+      </div>
+    </div>
+  }
+>
+  <div style={{ 
+    padding: '8px',
+    height: 'calc(100% - 200px)', // Subtract cover height
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    paddingBottom: '50px', // Reserve space for button
+    overflow: 'hidden' // Prevent content overflow
+  }}>
+    
+    {/* Combined Status and Queue Info with Scrolling Animation */}
+    <div style={{ 
+      marginBottom: '6px', 
+      flexShrink: 0,
+      height: '32px', // Fixed height to prevent layout shifts
+      overflow: 'hidden',
+      position: 'relative',
+      backgroundColor: '#f8f9fa',
+      borderRadius: '4px',
+      padding: '6px 4px',
+      display: 'flex',
+      alignItems: 'center'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        whiteSpace: 'nowrap',
+        fontSize: '11px',
+        animation: 'scrollText 5s linear infinite',
+        animationName: 'scrollText',
+        animationDuration: '20s',
+        animationTimingFunction: 'linear',
+        animationIterationCount: 'infinite'
+      }}>
+        {/* Status indicator */}
+        <span style={{ 
+          width: '6px', 
+          height: '6px', 
+          borderRadius: '50%', 
+          backgroundColor: status.isOccupied ? '#ff4d4f' : '#52c41a',
+          flexShrink: 0
+        }}></span>
+        
+        {/* Status text */}
+        <span>
+          {status.isOccupied ? `In use by ${status.activeSession.userEmail}` : 'Available'}
+          {userHasActiveSession && <span style={{ color: '#52c41a' }}> (Your Session)</span>}
+        </span>
+        
+        {/* Queue count */}
+        {status.queueLength > 0 && (
+          <>
+            <span style={{ margin: '0 4px' }}>|</span>
+            <span>Queue: {status.queueLength} users</span>
+          </>
+        )}
+        
+        {/* User queue position */}
+        {info && currentUser.role === 'guest' && (
+          <>
+            <span style={{ margin: '0 4px' }}>|</span>
+            <span>⏳ You are <strong>#{info.position}</strong> in queue</span>
+            <span style={{ margin: '0 4px' }}>|</span>
+            <span>Est. Wait: <strong>{info.estimated}s</strong></span>
+          </>
+        )}
+      </div>
+    </div>
 
-                >
-                  <div style={{ padding: '0 8px' }}>
-                    <div className="project-status" style={{ marginBottom: '12px' }}>
-                      {status.isOccupied ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ 
-                            width: '8px', 
-                            height: '8px', 
-                            borderRadius: '50%', 
-                            backgroundColor: '#ff4d4f' 
-                          }}></span>
-                          <span style={{ fontSize: '12px' }}>In use by {status.activeSession.userEmail}</span>
-                          {userHasActiveSession && (
-                            <span style={{ fontSize: '10px', color: '#52c41a' }}> (Your Session)</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ 
-                            width: '8px', 
-                            height: '8px', 
-                            borderRadius: '50%', 
-                            backgroundColor: '#52c41a' 
-                          }}></span>
-                          <span style={{ fontSize: '12px' }}>Available</span>
-                        </div>
-                      )}
-                      
-                      {status.queueLength > 0 && (
-                        <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
-                          Queue: {status.queueLength} users
-                        </div>
-                      )}
-                    </div>
+    {/* Terminate Button for Admins */}
+    {['superadmin', 'admin'].includes(currentUser.role) && status.isOccupied && (
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          terminateSession(status.activeSession.id);
+        }}
+        style={{
+          marginBottom: '6px',
+          background: '#ff4d4f',
+          color: 'white',
+          border: 'none',
+          padding: '3px 6px',
+          borderRadius: '4px',
+          fontSize: '10px',
+          cursor: 'pointer',
+          flexShrink: 0
+        }}
+      >
+        Terminate
+      </button>
+    )}
 
-                    {info && currentUser.role === 'guest' && (
+    {/* Main Action Button - Positioned at bottom */}
+    <button 
+      style={{
+        position: 'absolute',
+        bottom: '8px',
+        left: '8px',
+        right: '8px',
+        border: 'none',
+        background: userHasActiveSession ? '#52c41a' : (status.isOccupied ? '#faad14' : '#1890ff'),
+        color: 'white',
+        padding: '10px 16px',
+        borderRadius: '6px',
+        cursor: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 'not-allowed' : 'pointer',
+        opacity: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 0.6 : 1,
+        fontSize: '14px',
+        fontWeight: '500'
+      }}
+      onClick={() => handleProjectAccess(project)}
+      disabled={userHasActiveSession && status.activeSession?.userId !== currentUser.id}
+    >
+      {userHasActiveSession ? 'Continue Session' : 'View Project'}
+    </button>
+    
+  </div>
+</Card>
+                  {/* Back Side */}
+                  <Card
+                    style={{
+                      position: 'absolute',
+                      width: '100%',
+                      height: '100%',
+                      backfaceVisibility: 'hidden',
+                      transform: 'rotateY(180deg)',
+                      border: '1px solid #d9d9d9'
+                    }}
+                  >
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                       <div style={{ 
-                        fontSize: '12px', 
-                        color: '#555', 
-                        backgroundColor: '#f0f0f0', 
-                        padding: '4px 8px', 
-                        borderRadius: '4px',
-                        textAlign: 'center'
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        marginBottom: '16px'
                       }}>
-                        ⏳ You are <strong>#{info.position}</strong> in queue<br />
-                        Est. Wait: <strong>{info.estimated} seconds</strong>
+                        <h3 style={{ margin: 0, fontSize: '16px' }}>{project.name}</h3>
+                        <InfoOutlined 
+                          style={{
+                            fontSize: '15px',
+                            cursor: 'pointer',
+                            padding: '5px',
+                            borderRadius: '50%',
+                            backgroundColor: '#f0f0f0'
+                          }}
+                          onClick={(e) => handleCardFlip(project.id, e)}
+                        />
                       </div>
-                    )}
-
-                    {['superadmin', 'admin'].includes(currentUser.role) && status.isOccupied && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          terminateSession(status.activeSession.id);
-                        }}
-                        style={{
-                          marginTop: '8px',
-                          background: '#ff4d4f',
-                          color: 'white',
-                          border: 'none',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Terminate
-                      </button>
-                    )}
-
-                    {/* Main Action Button */}
-                    <button 
-                      style={{
-                        marginTop: '12px',
-                        width: '100%',
-                        border: 'none',
-                        background: userHasActiveSession ? '#52c41a' : (status.isOccupied ? '#faad14' : '#1890ff'),
-                        color: 'white',
-                        padding: '10px 16px',
-                        borderRadius: '6px',
-                        cursor: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 'not-allowed' : 'pointer',
-                        opacity: userHasActiveSession && status.activeSession?.userId !== currentUser.id ? 0.6 : 1,
-                        fontSize: '14px',
-                        fontWeight: '500'
-                      }}
-                      onClick={() => handleProjectAccess(project)}
-                      disabled={userHasActiveSession && status.activeSession?.userId !== currentUser.id}
-                    >
-                      {userHasActiveSession ? 'Continue Session' : 'View Project'}
-                    </button>
-                  </div>
-                </Card>
-
-                {/* Back Side */}
-                <Card
-                  style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '120%',
-                    backfaceVisibility: 'hidden',
-                    transform: 'rotateY(180deg)',
-                    border: '1px solid #d9d9d9'
-                  }}
-                >
-                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
-                      marginBottom: '16px'
-                    }}>
-                      <h3 style={{ margin: 0, fontSize: '16px' }}>{project.name}</h3>
-                      <InfoOutlined 
-                        style={{
-                          fontSize: '15px',
-                          cursor: 'pointer',
-                          padding: '5px',
-                          borderRadius: '50%',
-                          backgroundColor: '#f0f0f0'
-                        }}
-                        onClick={(e) => handleCardFlip(project.id, e)}
-                      />
+                      
+                      <div style={{ flex: 1, overflow: 'auto' }}>
+                        <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>Description:</h4>
+                        <p style={{ fontSize: '13px', lineHeight: '1.4', marginBottom: '16px' }}>
+                          {project.description}
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div style={{ flex: 1, overflow: 'auto' }}>
-                      <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>Description:</h4>
-                      <p style={{ fontSize: '13px', lineHeight: '1.4', marginBottom: '16px' }}>
-                        {project.description}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
+                  </Card>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
     )}
+    
     {/* Edit Modal */}
-{showEditModal && editingProject && (
-  <div className="modal-overlay">
-    <div className="modal-content" style={{ maxWidth: '500px' }}>
-      <h3>Edit Project</h3>
-      <form onSubmit={async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        try {
-          await set(ref(realtimeDb, `projects/${editingProject.id}`), {
-  name: formData.get('name'),
-  description: formData.get('description'),
-  image: formData.get('image'),
-  // Preserve other existing data
-  access: editingProject.access,
-  devices: editingProject.devices || {},
-  alerts: editingProject.alerts || {}
-});
-          setShowEditModal(false);
-          setEditingProject(null);
-          alert('Project updated successfully');
-        } catch (error) {
-          console.error('Error updating project:', error);
-          alert('Failed to update project');
-        }
-      }}>
-        <div style={{ marginBottom: '16px' }}>
-          <label>Project Name:</label>
-          <input 
-            type="text" 
-            name="name" 
-            defaultValue={editingProject.name}
-            required
-            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-          />
-        </div>
-        <div style={{ marginBottom: '16px' }}>
-          <label>Description:</label>
-          <textarea 
-            name="description" 
-            defaultValue={editingProject.description}
-            rows="3"
-            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-          />
-        </div>
-        <div style={{ marginBottom: '16px' }}>
-          <label>Image URL:</label>
-          <input 
-            type="url" 
-            name="image" 
-            defaultValue={editingProject.image}
-            style={{ width: '100%', padding: '8px', marginTop: '4px' }}
-          />
-        </div>
-        <div className="modal-actions">
-          <button type="submit" className="btn-primary">
-            Save Changes
-          </button>
-          <button 
-            type="button" 
-            onClick={() => {
+    {showEditModal && editingProject && (
+      <div className="modal-overlay">
+        <div className="modal-content" style={{ maxWidth: '500px' }}>
+          <h3>Edit Project</h3>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+              await set(ref(realtimeDb, `projects/${editingProject.id}`), {
+                name: formData.get('name'),
+                description: formData.get('description'),
+                image: formData.get('image'),
+                // Preserve other existing data
+                access: editingProject.access,
+                devices: editingProject.devices || {},
+                alerts: editingProject.alerts || {}
+              });
               setShowEditModal(false);
               setEditingProject(null);
-            }} 
-            className="btn-secondary"
-          >
-            Cancel
-          </button>
+              alert('Project updated successfully');
+            } catch (error) {
+              console.error('Error updating project:', error);
+              alert('Failed to update project');
+            }
+          }}>
+            <div style={{ marginBottom: '16px' }}>
+              <label>Project Name:</label>
+              <input 
+                type="text" 
+                name="name" 
+                defaultValue={editingProject.name}
+                required
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label>Description:</label>
+              <textarea 
+                name="description" 
+                defaultValue={editingProject.description}
+                rows="3"
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label>Image URL:</label>
+              <input 
+                type="url" 
+                name="image" 
+                defaultValue={editingProject.image}
+                style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="submit" className="btn-primary">
+                Save Changes
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingProject(null);
+                }} 
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
-      </form>
-    </div>
-  </div>
-)}
+      </div>
+    )}
   </div>
 );
       }

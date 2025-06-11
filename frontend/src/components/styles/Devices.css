@@ -31,17 +31,25 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 }
-
+@keyframes scrollText {
+  0% { 
+    transform: translateX(100%); 
+  }
+  100% { 
+    transform: translateX(-100%); 
+  }
+}
 /* Main Content Container */
 .content-card {
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
-  padding: 32px;
-  margin: 24px;
+  /* padding: 2px; */
+  /* margin: 24px; */
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
-  min-height: 500px;
+  min-height: 300px;
   transition: all 0.2s ease;
+  display: block;
 }
 
 .content-card:hover {
@@ -76,6 +84,7 @@
   grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 24px;
   margin-top: 32px;
+  margin-bottom: 20px;
 }
 
 /* Project Card Styling */
