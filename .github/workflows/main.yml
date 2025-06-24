@@ -39,4 +39,4 @@ jobs:
             docker pull naseerai/react-apps:latest
             docker stop react-container || true
             docker rm react-container || true
-            docker run -d --name react-container -p 80:80 naseerai/react-apps:latest
+            docker run -d --name react-container -p 8080:80 naseerai/react-apps:latest
