@@ -1,12 +1,11 @@
-name: Build, Push & Deploy
+name: Build & Deploy
 
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy:
-    name: Build Docker Image, Push to Docker Hub, and Deploy on EC2
+  build-push-deploy:
     runs-on: ubuntu-latest
 
     defaults:
@@ -28,16 +27,16 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: naseerai/react-apps:latest
+          tags: naseerai/react-app:latest
 
-      - name: Deploy on EC2 via SSH
+      - name: Deploy to Dedicated Server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
           script: |
-            docker pull naseerai/react-apps:latest
+            docker pull naseerai/react-app:latest
             docker stop react-container || true
             docker rm react-container || true
-            docker run -d --name react-container -p 80:80 naseerai/react-apps:latest
+            docker run -d --name react-container -p 80:80 naseerai/react-app:latest
