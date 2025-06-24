@@ -30,4 +30,4 @@ jobs:
         with:
           context: ./frontend
           push: true
-          tags: yourusername/react-app:latest
+          tags: naseerai/react-app:latest
