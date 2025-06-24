@@ -1,6 +1,0 @@
-- name: Build and Push Docker Image
-  uses: docker/build-push-action@v5
-  with:
-    context: ./frontend
-    push: true
-    tags: naseerai/react-app:latest
