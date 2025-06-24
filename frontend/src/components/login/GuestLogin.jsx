@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, Typography, message } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { Link, useNavigate } from 'react-router-dom';
-import '../styles/login.css';
-import GLI from '../assets/GuestLoginImage.jpg';
+import '../styles/Login.css';
+import GLI from '../assets/GuestLoginimage.jpg';
 import { guestLogin } from '../services/authService';
 
 const { Title, Text } = Typography;
